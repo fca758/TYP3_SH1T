@@ -1,31 +1,29 @@
 """GUI wrapper for typeShit CLI functions.
 
-This file provides a simple Tkinter GUI that reuses the placeholder
-functions defined in `typeShit.py`: encriptacionArchivo, desencriptarArchivo,
-and generadorDeClave. The GUI is intentionally simple and synchronous; it
-calls the functions directly and shows their textual output in a scrolled
-text widget.
+Small, robust Tkinter GUI that calls the handlers from `typeShit.py` when
+available. It attempts to load `lit.png` or `lit.jpg` from the script folder
+and prefers Pillow for crop/resize/overlay. If Pillow is not installed the
+GUI will still run but image behavior is degraded.
 
-Usage:
+Run:
     python typeShit_gui.py
-
-Note: the real encryption/decryption implementations should be placed in the
-existing functions in `typeShit.py` or in dedicated modules and imported here.
 """
 
 from __future__ import annotations
 
+import io
+import os
+import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-import io
-import sys
 from typing import Optional
 
-# Import functions from CLI scaffold; if you later move them, update imports.
+
+
+# Import CLI handlers from typeShit (fall back to simple stubs if missing)
 try:
     from typeShit import encriptacionArchivo, desencriptarArchivo, generadorDeClave
 except Exception:
-    # If import fails, create simple fallbacks so GUI can still run.
     def encriptacionArchivo(input_file: Optional[str], output_file: Optional[str], key: Optional[str], algorithm: Optional[str] = None) -> None:
         print("[ENCRYPT fallback]", input_file, output_file, key, algorithm)
 
@@ -36,63 +34,153 @@ except Exception:
         print("[KEYGEN fallback]", algorithm)
 
 
+algoritmos = ["AES-128", "AES-192", "AES-256"]
+
 class App(tk.Tk):
-    def __init__(self):
+    WINDOW_W = 640
+    WINDOW_H = 420
+    
+
+    def __init__(self) -> None:
         super().__init__()
         self.title("TYP3_SH1T GUI")
-        self.geometry("640x420")
+        self.geometry(f"{self.WINDOW_W}x{self.WINDOW_H}")
         self.resizable(False, False)
+
+        self.bg_image = None
+        self.pil_img = None
+        self.panel_image = None
+
+        # Try multiple filenames to be permissive
+        script_dir = os.path.dirname(__file__)
+        img_path = os.path.join(script_dir, "itslit.png")
+
+        if img_path:
+            # Prefer Pillow for robust image handling
+            try:
+                from PIL import Image, ImageTk, ImageOps  # type: ignore
+                pil = Image.open(img_path).convert("RGBA")
+                self.pil_img = pil
+                pil_bg = ImageOps.fit(pil, (self.WINDOW_W, self.WINDOW_H), Image.LANCZOS)
+                self.bg_image = ImageTk.PhotoImage(pil_bg.convert("RGB"))
+            except Exception:
+                # Fallback to Tk PhotoImage
+                try:
+                    self.bg_image = tk.PhotoImage(file=img_path)
+                except Exception:
+                    self.bg_image = None
+        else:
+            self.bg_image = None
 
         self.create_widgets()
 
-    def create_widgets(self):
-        frm = ttk.Frame(self, padding=12)
-        frm.pack(fill=tk.BOTH, expand=True)
+    def create_widgets(self) -> None:
+        # Place background image if available
+        if self.bg_image is not None:
+            bg_label = tk.Label(self, image=self.bg_image)
+            bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+        else:
+            notice = tk.Label(self, text="(No se cargó imagen de fondo lit.png/jpg)", bg="#222222", fg="white")
+            notice.place(relx=0.5, rely=0.02, anchor=tk.N)
 
-        # Action: Encrypt / Decrypt
-        ttk.Label(frm, text="Acción:").grid(column=0, row=0, sticky=tk.W)
+        # If we have the original PIL image, create a cropped panel image to place
+        panel_parent = None
+        panel_w, panel_h = 600, 380
+        if self.pil_img is not None:
+            try:
+                from PIL import ImageTk, Image
+                W, H = self.pil_img.size
+                left = max(0, (W - panel_w) // 2)
+                top = max(0, (H - panel_h) // 2)
+                panel_crop = self.pil_img.crop((left, top, left + panel_w, top + panel_h))
+                overlay = Image.new('RGBA', panel_crop.size, (0, 0, 0, int(255 * 0.18)))
+                panel_with_overlay = Image.alpha_composite(panel_crop.convert('RGBA'), overlay)
+                self.panel_image = ImageTk.PhotoImage(panel_with_overlay.convert('RGB'))
+
+                # place the background and the cropped panel image
+                bg_label = tk.Label(self, image=self.bg_image)
+                bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+                panel_label = tk.Label(self, image=self.panel_image, bd=0)
+                panel_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER, width=panel_w, height=panel_h)
+                panel_parent = panel_label
+            except Exception:
+                panel_parent = None
+
+        # parent widget for our form (panel_parent if present, else a dark Frame)
+        if panel_parent is None:
+            parent = tk.Frame(self, bg="#222222", padx=12, pady=12)
+            parent.pack(fill=tk.BOTH, expand=True)
+        else:
+            parent = panel_parent
+
+        # Decide colors depending on whether we placed widgets over the image
+        # - decorative labels: transparent over image (bg=None), dark bg when no image
+        # - inputs: light background + dark text over image (legible), dark theme otherwise
+        # - output: always black background with white text
+        label_bg = None if panel_parent is not None else "#222222"
+        label_fg = "#79b670" if panel_parent is None else "#000000"
+        entry_bg = "#c39c9c" if panel_parent is not None else "#333333"
+        entry_fg = "#000000" if panel_parent is not None else "#ffffff"
+        button_bg = "#3a8b8a" if panel_parent is None else None
+        button_fg = "#000000"
+        output_bg = "#000000"
+        output_fg = "#FFFFFF"
+
+        # Widgets
+        tk.Label(parent, text="Acción:", bg=label_bg, fg=label_fg).grid(column=0, row=0, sticky=tk.W)
         self.action_var = tk.StringVar(value="encrypt")
-        action_combo = ttk.Combobox(frm, textvariable=self.action_var, values=["encrypt", "decrypt"], state="readonly", width=12)
+        style = ttk.Style()
+        try:
+            style.theme_use('clam')
+        except Exception:
+            pass
+
+        # Make combobox field match entry colors for legibility
+        try:
+            style.configure('Custom.TCombobox', fieldbackground=entry_bg, background=entry_bg, foreground=entry_fg)
+        except Exception:
+            pass
+        action_combo = ttk.Combobox(parent, textvariable=self.action_var, values=["encrypt", "decrypt"], state="readonly", width=12, style='Custom.TCombobox')
         action_combo.grid(column=1, row=0, sticky=tk.W)
 
-        # Algorithm selection
-        ttk.Label(frm, text="Algoritmo:").grid(column=0, row=1, sticky=tk.W)
+
+
+        tk.Label(parent, text="Algoritmo:", bg=label_bg, fg=label_fg).grid(column=0, row=1, sticky=tk.W)
         self.algorithm_var = tk.StringVar(value="AES-128")
-        algo_combo = ttk.Combobox(frm, textvariable=self.algorithm_var, values=["AES-128", "AES-192", "AES-256"], state="readonly", width=12)
+        algo_combo = ttk.Combobox(parent, textvariable=self.algorithm_var, values=algoritmos, state="readonly", width=12, style='Custom.TCombobox')
         algo_combo.grid(column=1, row=1, sticky=tk.W)
 
-        # Input file
-        ttk.Label(frm, text="Archivo entrada:").grid(column=0, row=2, sticky=tk.W)
+        tk.Label(parent, text="Archivo entrada:", bg=label_bg, fg=label_fg).grid(column=0, row=2, sticky=tk.W)
         self.input_var = tk.StringVar()
-        input_entry = ttk.Entry(frm, textvariable=self.input_var, width=50)
+        input_entry = tk.Entry(parent, textvariable=self.input_var, width=50, bg=entry_bg, fg=entry_fg, insertbackground=entry_fg)
         input_entry.grid(column=1, row=2, columnspan=2, sticky=tk.W)
-        ttk.Button(frm, text="Examinar", command=self.browse_input).grid(column=3, row=2, sticky=tk.W)
+        tk.Button(parent, text="Examinar", command=self.browse_input, bg=button_bg, fg=button_fg).grid(column=3, row=2, sticky=tk.W)
 
-        # Key
-        ttk.Label(frm, text="Clave:").grid(column=0, row=3, sticky=tk.W)
+        tk.Label(parent, text="Clave:", bg=label_bg, fg=label_fg).grid(column=0, row=3, sticky=tk.W)
         self.key_var = tk.StringVar()
-        key_entry = ttk.Entry(frm, textvariable=self.key_var, width=50)
+        key_entry = tk.Entry(parent, textvariable=self.key_var, width=50, bg=entry_bg, fg=entry_fg, insertbackground=entry_fg)
         key_entry.grid(column=1, row=3, columnspan=2, sticky=tk.W)
 
-        # Run button
-        run_btn = ttk.Button(frm, text="Ejecutar", command=self.run_action)
+        run_btn = tk.Button(parent, text="Ejecutar", command=self.run_action, bg=button_bg, fg=button_fg)
         run_btn.grid(column=1, row=4, pady=(8, 8), sticky=tk.W)
 
-        # Output text
-        ttk.Label(frm, text="Salida:").grid(column=0, row=5, sticky=tk.NW)
-        self.output_txt = tk.Text(frm, width=78, height=12, wrap=tk.WORD)
+        tk.Label(parent, text="Salida:", bg=label_bg, fg=label_fg).grid(column=0, row=5, sticky=tk.NW)
+        self.output_txt = tk.Text(parent, width=78, height=12, wrap=tk.WORD, bg=output_bg, fg=output_fg, insertbackground=output_fg)
         self.output_txt.grid(column=0, row=6, columnspan=4, sticky=tk.W)
 
-        # Simple grid padding
-        for child in frm.winfo_children():
-            child.grid_configure(padx=6, pady=4)
+        # Grid padding
+        for child in parent.winfo_children():
+            try:
+                child.grid_configure(padx=6, pady=4)
+            except Exception:
+                pass
 
-    def browse_input(self):
+    def browse_input(self) -> None:
         path = filedialog.askopenfilename(title="Selecciona archivo")
         if path:
             self.input_var.set(path)
 
-    def run_action(self):
+    def run_action(self) -> None:
         action = self.action_var.get()
         algo = self.algorithm_var.get()
         infile = self.input_var.get() or None
@@ -108,9 +196,18 @@ class App(tk.Tk):
         try:
             sys.stdout = buf
             if action == "encrypt":
+
+
+                #ENCRIPTACIÓN DEL ARCHIVO
                 encriptacionArchivo(infile, None, key, algorithm=algo)
             else:
+
+
+                #DESENCRIPTACIÓN DEL ARCHIVO
                 desencriptarArchivo(infile, None, key, algorithm=algo)
+
+
+
         except Exception as e:
             messagebox.showerror("Error", f"Ocurrió un error al ejecutar la acción: {e}")
         finally:

@@ -11,6 +11,7 @@ def encrypt_file_aes_cbc_256(file_path: str, key: bytes, output_path: str = None
     :param key: 32-byte encryption key (AES-256)
     :param output_path: Optional path to save the encrypted file
     """
+    
     if len(key) != 32:
         raise ValueError("Key must be 32 bytes (256 bits) for AES-256.")
 
