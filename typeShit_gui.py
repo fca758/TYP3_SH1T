@@ -1,14 +1,3 @@
-"""GUI wrapper for typeShit CLI functions.
-
-Small, robust Tkinter GUI that calls the handlers from `typeShit.py` when
-available. It attempts to load `lit.png` or `lit.jpg` from the script folder
-and prefers Pillow for crop/resize/overlay. If Pillow is not installed the
-GUI will still run but image behavior is degraded.
-
-Run:
-    python typeShit_gui.py
-"""
-
 from __future__ import annotations
 
 import io
@@ -20,7 +9,7 @@ from typing import Optional
 
 
 
-# Import CLI handlers from typeShit (fall back to simple stubs if missing)
+# Importar algoritmos, si no funcioan entonces da un error
 try:
     from typeShit import encriptacionArchivo, desencriptarArchivo, generadorDeClave
 except Exception:
@@ -34,13 +23,18 @@ except Exception:
         print("[KEYGEN fallback]", algorithm)
 
 
+
+# Lista de algoritmos soportados
 algoritmos = ["AES-128", "AES-192", "AES-256"]
 
+
+# Clase principal de la aplicación
 class App(tk.Tk):
     WINDOW_W = 640
-    WINDOW_H = 420
-    
+    WINDOW_H = 420    
 
+
+    # Inicialización de la ventana
     def __init__(self) -> None:
         super().__init__()
         self.title("TYP3_SH1T GUI")
@@ -51,12 +45,11 @@ class App(tk.Tk):
         self.pil_img = None
         self.panel_image = None
 
-        # Try multiple filenames to be permissive
+
         script_dir = os.path.dirname(__file__)
         img_path = os.path.join(script_dir, "itslit.png")
 
         if img_path:
-            # Prefer Pillow for robust image handling
             try:
                 from PIL import Image, ImageTk, ImageOps  # type: ignore
                 pil = Image.open(img_path).convert("RGBA")
@@ -64,7 +57,7 @@ class App(tk.Tk):
                 pil_bg = ImageOps.fit(pil, (self.WINDOW_W, self.WINDOW_H), Image.LANCZOS)
                 self.bg_image = ImageTk.PhotoImage(pil_bg.convert("RGB"))
             except Exception:
-                # Fallback to Tk PhotoImage
+                
                 try:
                     self.bg_image = tk.PhotoImage(file=img_path)
                 except Exception:
@@ -75,7 +68,7 @@ class App(tk.Tk):
         self.create_widgets()
 
     def create_widgets(self) -> None:
-        # Place background image if available
+        # Poner imagen de fondo si está disponible
         if self.bg_image is not None:
             bg_label = tk.Label(self, image=self.bg_image)
             bg_label.place(x=0, y=0, relwidth=1, relheight=1)
@@ -106,14 +99,14 @@ class App(tk.Tk):
             except Exception:
                 panel_parent = None
 
-        # parent widget for our form (panel_parent if present, else a dark Frame)
+        # Frame padre
         if panel_parent is None:
             parent = tk.Frame(self, bg="#222222", padx=12, pady=12)
             parent.pack(fill=tk.BOTH, expand=True)
         else:
             parent = panel_parent
 
-        # Decide colors depending on whether we placed widgets over the image
+        # Scheme de colores
         # - decorative labels: transparent over image (bg=None), dark bg when no image
         # - inputs: light background + dark text over image (legible), dark theme otherwise
         # - output: always black background with white text
@@ -145,41 +138,54 @@ class App(tk.Tk):
 
 
 
+        # Input de seleccion de algoritmo
         tk.Label(parent, text="Algoritmo:", bg=label_bg, fg=label_fg).grid(column=0, row=1, sticky=tk.W)
         self.algorithm_var = tk.StringVar(value="AES-128")
         algo_combo = ttk.Combobox(parent, textvariable=self.algorithm_var, values=algoritmos, state="readonly", width=12, style='Custom.TCombobox')
         algo_combo.grid(column=1, row=1, sticky=tk.W)
 
+        # Input de seleccion de archivo
         tk.Label(parent, text="Archivo entrada:", bg=label_bg, fg=label_fg).grid(column=0, row=2, sticky=tk.W)
         self.input_var = tk.StringVar()
         input_entry = tk.Entry(parent, textvariable=self.input_var, width=50, bg=entry_bg, fg=entry_fg, insertbackground=entry_fg)
         input_entry.grid(column=1, row=2, columnspan=2, sticky=tk.W)
         tk.Button(parent, text="Examinar", command=self.browse_input, bg=button_bg, fg=button_fg).grid(column=3, row=2, sticky=tk.W)
 
+        # Input de clave
         tk.Label(parent, text="Clave:", bg=label_bg, fg=label_fg).grid(column=0, row=3, sticky=tk.W)
         self.key_var = tk.StringVar()
         key_entry = tk.Entry(parent, textvariable=self.key_var, width=50, bg=entry_bg, fg=entry_fg, insertbackground=entry_fg)
         key_entry.grid(column=1, row=3, columnspan=2, sticky=tk.W)
 
+        # Botón para generar clave (a la derecha del campo clave)
+        # Use a lambda to call the GUI handler so we don't execute the generator at widget creation
+        gen_btn = tk.Button(parent, text="Generar", command=lambda: self.on_generar_clave(self.algorithm_var.get()), bg=button_bg, fg=button_fg)
+        gen_btn.grid(column=3, row=3, sticky=tk.W)
+
+        # Botón de ejecutar
         run_btn = tk.Button(parent, text="Ejecutar", command=self.run_action, bg=button_bg, fg=button_fg)
         run_btn.grid(column=1, row=4, pady=(8, 8), sticky=tk.W)
 
+
+        # Salida de consola
         tk.Label(parent, text="Salida:", bg=label_bg, fg=label_fg).grid(column=0, row=5, sticky=tk.NW)
         self.output_txt = tk.Text(parent, width=78, height=12, wrap=tk.WORD, bg=output_bg, fg=output_fg, insertbackground=output_fg)
         self.output_txt.grid(column=0, row=6, columnspan=4, sticky=tk.W)
 
-        # Grid padding
+        # Ajuste de padding del grid
         for child in parent.winfo_children():
             try:
                 child.grid_configure(padx=6, pady=4)
             except Exception:
                 pass
 
+    # Método para pedir el archivo
     def browse_input(self) -> None:
         path = filedialog.askopenfilename(title="Selecciona archivo")
         if path:
             self.input_var.set(path)
 
+    # Método para ejecutar la acción seleccionada
     def run_action(self) -> None:
         action = self.action_var.get()
         algo = self.algorithm_var.get()
@@ -190,7 +196,7 @@ class App(tk.Tk):
             messagebox.showwarning("Falta archivo", "Debes seleccionar un archivo de entrada.")
             return
 
-        # Capture stdout from the called functions to show in GUI
+        # Capturar stdout de las funciones llamadas para mostrar en la GUI
         buf = io.StringIO()
         old_stdout = sys.stdout
         try:
@@ -205,9 +211,6 @@ class App(tk.Tk):
 
                 #DESENCRIPTACIÓN DEL ARCHIVO
                 desencriptarArchivo(infile, None, key, algorithm=algo)
-
-
-
         except Exception as e:
             messagebox.showerror("Error", f"Ocurrió un error al ejecutar la acción: {e}")
         finally:
@@ -216,6 +219,53 @@ class App(tk.Tk):
         output = buf.getvalue()
         self.output_txt.delete("1.0", tk.END)
         self.output_txt.insert(tk.END, output)
+
+    def on_generar_clave(self, algorithm: Optional[str] = None) -> None:
+        """Generate a key for the selected algorithm and put its hex into the key entry.
+
+        Calls the imported generadorDeClave which is expected to return raw bytes.
+        If it returns bytes, we convert to hex for display. If it returns a string,
+        we use it directly. Any error falls back to local os.urandom generation.
+        """
+        if algorithm is None:
+            algorithm = self.algorithm_var.get()
+
+        key_hex: Optional[str] = None
+        try:
+            key_val = generadorDeClave(algorithm)
+        except Exception as e:
+            # show error in output area and fall back
+            try:
+                self.output_txt.insert(tk.END, f"[Keygen error] {e}\n")
+            except Exception:
+                pass
+            key_val = None
+
+        if isinstance(key_val, (bytes, bytearray)):
+            key_hex = key_val.hex()
+        elif isinstance(key_val, str):
+            key_hex = key_val
+        else:
+            # Fallback generation: choose length by algorithm
+            sizes = {"AES-128": 16, "AES-192": 24, "AES-256": 32}
+            n = sizes.get(algorithm, 16)
+            key_bytes = os.urandom(n)
+            key_hex = key_bytes.hex()
+            try:
+                self.output_txt.insert(tk.END, f"[Keygen fallback] Generated {n} bytes\n")
+            except Exception:
+                pass
+
+        if key_hex is not None:
+            # Put hex into entry
+            try:
+                self.key_var.set(key_hex)
+            except Exception:
+                pass
+            try:
+                self.output_txt.insert(tk.END, f"Generated key ({algorithm}): {key_hex}\n")
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
