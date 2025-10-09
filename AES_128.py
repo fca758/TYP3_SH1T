@@ -88,19 +88,3 @@ def decrypt_file_aes_cbc_128(encrypted_path: str, key: bytes, output_path: str =
 
     print(f"🔓 Archivo descifrado correctamente: {output_path}")
 
-
-# ==============================================================
-# EJEMPLO DE USO
-# ==============================================================
-
-if __name__ == "__main__":
-    # Generar una clave aleatoria de 128 bits (16 bytes)
-    key = os.urandom(16)
-    print(f"🔑 Clave AES generada: {key.hex()}")
-
-    # Archivo de ejemplo a cifrar
-    original_file = "ejemplo.txt"
-
-    # Cifrar y descifrar el archivo
-    encrypt_file_aes_cbc_128(original_file, key)
-    decrypt_file_aes_cbc_128(original_file + ".enc", key)
