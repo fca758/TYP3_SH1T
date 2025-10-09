@@ -86,5 +86,5 @@ def decrypt_file_aes_cbc_128(encrypted_path: str, key: bytes, output_path: str =
     with open(output_path, 'wb') as f:
         f.write(data)
 
-    print(f"🔓 Archivo descifrado correctamente: {output_path}")
+    print(f" Archivo descifrado correctamente: {output_path}")
 
