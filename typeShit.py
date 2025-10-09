@@ -12,6 +12,8 @@ from __future__ import annotations
 from typing import Optional, Union
 import re
 import AES
+import AES_128
+import AES_192
 
 
 class NotSupportedAlgoritm(Exception):
@@ -19,6 +21,8 @@ class NotSupportedAlgoritm(Exception):
     def __init__(self, *args):
         super().__init__(*args)
 
+aes128 = AES_128
+aes192 = AES_192
 aes256 = AES
 
 aesAlgoritmos = ["AES-128", "AES-192", "AES-256"]
@@ -99,17 +103,26 @@ def encriptacionArchivo(input_file: Optional[str], output_file: Optional[str], k
             # AES.encrypt_file_aes_cbc_256 expects (file_path, key, output_path)
             aes256.encrypt_file_aes_cbc_256(input_file, key_bytes, output_file)
         except AttributeError:
-            print("[ENCRYPT] AES-256: encrypt_file_aes_cbc_256 not found on AES module — adapt to your implementation")
+            print("[ENCRYPT] AES-256: Algoritmo AES-256 no encontrado en el modulo AES - adapta a tu implementacion")
     elif algorithm == "AES-128":
         # TODO: implement AES-128 branch
         # Example placeholder for future implementation:
         # from Algoritmo_Simetrico.Cifrado128 import Cifrador128
         # cif = Cifrador128(key)
         # cif.encrypt_file(input_file, output_file)
-        print("[ENCRYPT] AES-128 not yet implemented")
+        try:
+            # AES.encrypt_file_aes_cbc_256 expects (file_path, key, output_path)
+
+            aes128.encrypt_file_aes_cbc_128(input_file, key_bytes, output_file)
+        except AttributeError:
+            print("[ENCRYPT] AES-128: Algoritmo AES-128 no encontrado en el modulo AES - adapta a tu implementacion")
     elif algorithm == "AES-192":
         # TODO: implement AES-192 branch
-        print("[ENCRYPT] AES-192 not yet implemented")
+        try:
+            # AES.encrypt_file_aes_cbc_256 expects (file_path, key, output_path)
+            aes192.encrypt_file_aes_cbc_192(input_file, key_bytes, output_file)
+        except AttributeError:
+            print("[ENCRYPT] AES-256: Algoritmo AES-192 no encontrado en el modulo AES - adapta a tu implementacion")
     else:
         raise NotSupportedAlgoritm(f"Algorithm '{algorithm}' is not supported")
 
@@ -142,11 +155,24 @@ def desencriptarArchivo(input_file: Optional[str], output_file: Optional[str], k
         except AttributeError:
             print("[DECRYPT] AES-256: decrypt_file_aes_cbc_256 not found on AES module — adapt to your implementation")
     elif algorithm == "AES-128":
-        # TODO: implement AES-128 decryption
-        print("[DECRYPT] AES-128 not yet implemented")
+        # TODO: implement AES-128 branch
+        # Example placeholder for future implementation:
+        # from Algoritmo_Simetrico.Cifrado128 import Cifrador128
+        # cif = Cifrador128(key)
+        # cif.encrypt_file(input_file, output_file)
+        try:
+            # AES.encrypt_file_aes_cbc_256 expects (file_path, key, output_path)
+
+            aes128.decrypt_file_aes_cbc_128(input_file, key_bytes, output_file)
+        except AttributeError:
+            print("[ENCRYPT] AES-128: Algoritmo AES-128 no encontrado en el modulo AES - adapta a tu implementacion")
     elif algorithm == "AES-192":
-        # TODO: implement AES-192 decryption
-        print("[DECRYPT] AES-192 not yet implemented")
+        # TODO: implement AES-192 branch
+        try:
+            # AES.encrypt_file_aes_cbc_256 expects (file_path, key, output_path)
+            aes192.decrypt_file_aes_cbc_192(input_file, key_bytes, output_file)
+        except AttributeError:
+            print("[ENCRYPT] AES-256: Algoritmo AES-192 no encontrado en el modulo AES - adapta a tu implementacion")
     else:
         raise NotSupportedAlgoritm(f"Algorithm '{algorithm}' is not supported")
 
