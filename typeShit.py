@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional, Union
 import re
-import AES
+import AES_256
 import AES_128
 import AES_192
 
@@ -10,7 +10,7 @@ import AES_192
 
 aes128 = AES_128
 aes192 = AES_192
-aes256 = AES
+aes256 = AES_256
 
 aesAlgoritmos = ["AES-128", "AES-192", "AES-256"]
 
