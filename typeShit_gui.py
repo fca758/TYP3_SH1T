@@ -10,18 +10,7 @@ from typing import Optional
 
 
 # Importar algoritmos, si no funcioan entonces da un error
-try:
-    from typeShit import encriptacionArchivo, desencriptarArchivo, generadorDeClave
-except Exception:
-    def encriptacionArchivo(input_file: Optional[str], output_file: Optional[str], key: Optional[str], algorithm: Optional[str] = None) -> None:
-        print("[ENCRYPT fallback]", input_file, output_file, key, algorithm)
-
-    def desencriptarArchivo(input_file: Optional[str], output_file: Optional[str], key: Optional[str], algorithm: Optional[str] = None) -> None:
-        print("[DECRYPT fallback]", input_file, output_file, key, algorithm)
-
-    def generadorDeClave(algorithm: Optional[str]) -> None:
-        print("[KEYGEN fallback]", algorithm)
-
+from typeShit import encriptacionArchivo, desencriptarArchivo, generadorDeClave
 
 
 # Lista de algoritmos soportados
@@ -76,7 +65,7 @@ class App(tk.Tk):
             notice = tk.Label(self, text="(No se cargó imagen de fondo lit.png/jpg)", bg="#222222", fg="white")
             notice.place(relx=0.5, rely=0.02, anchor=tk.N)
 
-        # If we have the original PIL image, create a cropped panel image to place
+
         panel_parent = None
         panel_w, panel_h = 600, 380
         if self.pil_img is not None:
@@ -128,7 +117,7 @@ class App(tk.Tk):
         except Exception:
             pass
 
-        # Make combobox field match entry colors for legibility
+
         try:
             style.configure('Custom.TCombobox', fieldbackground=entry_bg, background=entry_bg, foreground=entry_fg)
         except Exception:
@@ -158,7 +147,6 @@ class App(tk.Tk):
         key_entry.grid(column=1, row=3, columnspan=2, sticky=tk.W)
 
         # Botón para generar clave (a la derecha del campo clave)
-        # Use a lambda to call the GUI handler so we don't execute the generator at widget creation
         gen_btn = tk.Button(parent, text="Generar", command=lambda: self.on_generar_clave(self.algorithm_var.get()), bg=button_bg, fg=button_fg)
         gen_btn.grid(column=3, row=3, sticky=tk.W)
 
@@ -221,12 +209,7 @@ class App(tk.Tk):
         self.output_txt.insert(tk.END, output)
 
     def on_generar_clave(self, algorithm: Optional[str] = None) -> None:
-        """Generate a key for the selected algorithm and put its hex into the key entry.
 
-        Calls the imported generadorDeClave which is expected to return raw bytes.
-        If it returns bytes, we convert to hex for display. If it returns a string,
-        we use it directly. Any error falls back to local os.urandom generation.
-        """
         if algorithm is None:
             algorithm = self.algorithm_var.get()
 
@@ -234,30 +217,30 @@ class App(tk.Tk):
         try:
             key_val = generadorDeClave(algorithm)
         except Exception as e:
-            # show error in output area and fall back
+            # Error al generar clave
             try:
                 self.output_txt.insert(tk.END, f"[Keygen error] {e}\n")
             except Exception:
                 pass
             key_val = None
 
-        if isinstance(key_val, (bytes, bytearray)):
-            key_hex = key_val.hex()
-        elif isinstance(key_val, str):
-            key_hex = key_val
-        else:
-            # Fallback generation: choose length by algorithm
-            sizes = {"AES-128": 16, "AES-192": 24, "AES-256": 32}
-            n = sizes.get(algorithm, 16)
-            key_bytes = os.urandom(n)
-            key_hex = key_bytes.hex()
+
+        key_hex = key_val.hex() if key_val is not None else None
+
+        if key_val is None:
+            # Error al generar clave - fallback a clave aleatoria
             try:
+                sizes = {"AES-128": 16, "AES-192": 24, "AES-256": 32}
+                n = sizes.get(algorithm, 16)
+                key_bytes = os.urandom(n)
+                key_hex = key_bytes.hex()
                 self.output_txt.insert(tk.END, f"[Keygen fallback] Generated {n} bytes\n")
             except Exception:
                 pass
 
-        if key_hex is not None:
-            # Put hex into entry
+
+        else:
+            # Colocar la clave generada en el campo de texto y en la salida
             try:
                 self.key_var.set(key_hex)
             except Exception:
@@ -266,7 +249,6 @@ class App(tk.Tk):
                 self.output_txt.insert(tk.END, f"Generated key ({algorithm}): {key_hex}\n")
             except Exception:
                 pass
-
 
 if __name__ == "__main__":
     app = App()
