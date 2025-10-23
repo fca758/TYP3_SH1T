@@ -8,7 +8,7 @@ class AES_CBC():
     def __init__(self):
         pass
 
-    def encrypt_file_aes_cbc(self, file_path: str, key: bytes, key_length_bits: int, output_path: str = None):
+    def encrypt_file_aes_cbc(self, file_path: str,modeAES: str, key: bytes, key_length_bits: int, output_path: str = None):
         """
         Cifra un archivo usando AES en modo CBC con padding PKCS7.
         
@@ -46,7 +46,23 @@ class AES_CBC():
 
         # --- Configurar el objeto de cifrado AES + CBC ---
         backend = default_backend()
-        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
+
+        modeCipher = modes
+
+
+        match modeAES:
+            case "CBC":  
+                modeCipher = modes.CBC(iv)
+            
+            case "CFB":
+                modeCipher = modes.CFB(iv)
+        
+            case "OFB":
+                modeCipher = modes.OFB(iv)
+            case _:
+                raise ValueError(f"Modo de cifrado no soportado: {modeAES}")
+     
+        cipher = Cipher(algorithms.AES(key), modeCipher, backend=backend)
         encryptor = cipher.encryptor()
 
         # --- Aplicar padding PKCS7 ---
@@ -74,7 +90,7 @@ class AES_CBC():
 
         print(f"Archivo cifrado correctamente usando AES-{key_length_bits} bits → {output_path}")
 
-    def decrypt_file_aes_cbc(self, file_path: str, key: bytes, key_length_bits: int, output_path: str = None):
+    def decrypt_file_aes_cbc(self, file_path: str,modeAES : str, key: bytes, key_length_bits: int, output_path: str = None):
         """
         Descifra un archivo cifrado con AES en modo CBC con padding PKCS7.
         
@@ -119,7 +135,23 @@ class AES_CBC():
 
         # --- Configurar el objeto de descifrado AES + CBC ---
         backend = default_backend()
-        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
+
+        modeCipher = modes
+
+
+        match modeAES:
+            case "CBC":  
+                modeCipher = modes.CBC(iv)
+            
+            case "CFB":
+                modeCipher = modes.CFB(iv)
+        
+            case "OFB":
+                modeCipher = modes.OFB(iv)
+            case _:
+                raise ValueError(f"Modo de cifrado no soportado: {modeAES}")
+     
+        cipher = Cipher(algorithms.AES(key), modeCipher, backend=backend)   
         decryptor = cipher.decryptor()
 
         # --- Descifrar los datos ---

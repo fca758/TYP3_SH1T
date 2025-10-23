@@ -49,11 +49,11 @@ def _normalize_key(key: Union[None, str, bytes], algorithm: str) -> bytes:
 
 
 
-def encriptacionArchivo(input_file: Optional[str], output_file: Optional[str], key, algorithm: Optional[str] = None) -> None:
+def encriptacionArchivo(input_file: str, output_file: Optional[str],mode: str, key, algorithm: str = None) -> None:
     # Basic logging
     print("[ENCRYPT] handler called")
-    print(f"  inpsut_file = {input_file}")
-    print(f"  output_file = {output_file}")
+    print(f"  input_file = {input_file}")
+    print(f"  mode = {mode}")
     print(f"  key = {key}")
     print(f"  algorithm = {algorithm}")
 
@@ -68,38 +68,41 @@ def encriptacionArchivo(input_file: Optional[str], output_file: Optional[str], k
     # Si ya es bytes, se deja como está.
     key_bytes = _normalize_key(key, algorithm)
  
- 
-    if algorithm == "AES-256":
-        try:
-            aesCBC.encrypt_file_aes_cbc(input_file, key_bytes, 256, output_file)
-            #aes256.encrypt_file_aes_cbc_256(input_file, key_bytes, output_file)
-        except AttributeError:
-            print("[ENCRYPT] AES-256: Algoritmo AES-256 no encontrado en el modulo AES - adapta a tu implementacion")
-    
-    elif algorithm == "AES-128":
-        try:
-            aesCBC.encrypt_file_aes_cbc(input_file, key_bytes, 128, output_file)
-            #aes128.encrypt_file_aes_cbc_128(input_file, key_bytes, output_file)
-        except AttributeError:
-            print("[ENCRYPT] AES-128: Algoritmo AES-128 no encontrado en el modulo AES - adapta a tu implementacion")
-    
-    elif algorithm == "AES-192":
-        try:
-            aesCBC.encrypt_file_aes_cbc(input_file, key_bytes, 192, output_file)
-            #aes192.encrypt_file_aes_cbc_192(input_file, key_bytes, output_file)
-        except AttributeError:
-            print("[ENCRYPT] AES-256: Algoritmo AES-192 no encontrado en el modulo AES - adapta a tu implementacion")
-    else:
-        raise NotSupportedAlgoritm(f"Algorithm '{algorithm}' is not supported")
+
+    match algorithm:
+        case "AES-256":
+            try:
+
+                aesCBC.encrypt_file_aes_cbc(file_path=input_file, modeAES=mode, key_length_bits=256, key=key_bytes, output_path=output_file)
+                #aes256.decrypt_file_aes_cbc_256(input_file, key_bytes, output_file)
+            except AttributeError:
+                print("[DECRYPT] AES-256: decrypt_file_aes_cbc_256 not found on AES module — adapt to your implementation")
+
+        case "AES-192":
+            try:
+
+                aesCBC.encrypt_file_aes_cbc(file_path=input_file,modeAES=mode, key=key_bytes, key_length_bits=192, output_path=output_file)
+                #aes192.decrypt_file_aes_cbc_192(input_file, key_bytes, output_file)
+            except AttributeError:
+                print("[ENCRYPT] AES-256: Algoritmo AES-192 no encontrado en el modulo AES - adapta a tu implementacion")
+        case "AES-128":
+            try:
+
+                aesCBC.encrypt_file_aes_cbc(file_path=input_file,modeAES=mode, key=key_bytes, key_length_bits=128, output_path=output_file)
+                #aes128.decrypt_file_aes_cbc_128(input_file, key_bytes, output_file)
+            except AttributeError:
+                print("[ENCRYPT] AES-128: Algoritmo AES-128 no encontrado en el modulo AES - adapta a tu implementacion")
 
 
-def desencriptarArchivo(input_file: Optional[str], output_file: Optional[str], key: Optional[str], algorithm: Optional[str] = None) -> None:
+
+def desencriptarArchivo(input_file: str, output_file: Optional[str],mode: str, key:str, algorithm: str = None) -> None:
     # Basic logging
     print("[DECRYPT] handler called")
     print(f"  input_file = {input_file}")
-    print(f"  output_file = {output_file}")
+    print(f"  mode = {mode}")
     print(f"  key = {key}")
     print(f"  algorithm = {algorithm}")
+
 
     if algorithm is None:
         raise NotSupportedAlgoritm("No algorithm specified")
@@ -110,30 +113,31 @@ def desencriptarArchivo(input_file: Optional[str], output_file: Optional[str], k
     # Si ya es bytes, se deja como está.
     key_bytes = _normalize_key(key, algorithm)
 
-    if algorithm == "AES-256":
-        try:
+    match algorithm:
+        case "AES-256":
+            try:
 
-            aesCBC.decrypt_file_aes_cbc(file_path=input_file, key=key_bytes, key_length_bits=256, output_path=output_file)
-            #aes256.decrypt_file_aes_cbc_256(input_file, key_bytes, output_file)
-        except AttributeError:
-            print("[DECRYPT] AES-256: decrypt_file_aes_cbc_256 not found on AES module — adapt to your implementation")
-    elif algorithm == "AES-192":
+                aesCBC.decrypt_file_aes_cbc(file_path=input_file, modeAES=mode, key=key_bytes, key_length_bits=256, output_path=output_file)
+                #aes256.decrypt_file_aes_cbc_256(input_file, key_bytes, output_file)
+            except AttributeError:
+                print("[DECRYPT] AES-256: decrypt_file_aes_cbc_256 not found on AES module — adapt to your implementation")
 
-        try:
+        case "AES-192":
+            try:
 
-            aesCBC.decrypt_file_aes_cbc(file_path=input_file, key=key_bytes, key_length_bits=192, output_path=output_file)
-            #aes192.decrypt_file_aes_cbc_192(input_file, key_bytes, output_file)
-        except AttributeError:
-            print("[ENCRYPT] AES-256: Algoritmo AES-192 no encontrado en el modulo AES - adapta a tu implementacion")
-    elif algorithm == "AES-128":
-        try:
+                aesCBC.decrypt_file_aes_cbc(file_path=input_file, modeAES=mode, key=key_bytes, key_length_bits=192, output_path=output_file)
+                #aes192.decrypt_file_aes_cbc_192(input_file, key_bytes, output_file)
+            except AttributeError:
+                print("[ENCRYPT] AES-256: Algoritmo AES-192 no encontrado en el modulo AES - adapta a tu implementacion")
+        case "AES-128":
+            try:
 
-            aesCBC.decrypt_file_aes_cbc(file_path=input_file, key=key_bytes, key_length_bits=128, output_path=output_file)
-            #aes128.decrypt_file_aes_cbc_128(input_file, key_bytes, output_file)
-        except AttributeError:
-            print("[ENCRYPT] AES-128: Algoritmo AES-128 no encontrado en el modulo AES - adapta a tu implementacion")
-    else:
-        raise NotSupportedAlgoritm(f"Algorithm '{algorithm}' is not supported")
+                aesCBC.decrypt_file_aes_cbc(file_path=input_file, modeAES=mode, key=key_bytes, key_length_bits=128, output_path=output_file)
+                #aes128.decrypt_file_aes_cbc_128(input_file, key_bytes, output_file)
+            except AttributeError:
+                print("[ENCRYPT] AES-128: Algoritmo AES-128 no encontrado en el modulo AES - adapta a tu implementacion")
+
+
 
 
 
