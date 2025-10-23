@@ -2,16 +2,11 @@ from __future__ import annotations
 
 from typing import Optional, Union
 import re
-import AES_256
-import AES_128
-import AES_192
+from aesCBC import AES_CBC
 
 
 
-aes128 = AES_128
-aes192 = AES_192
-aes256 = AES_256
-
+aesCBC = AES_CBC()
 aesAlgoritmos = ["AES-128", "AES-192", "AES-256"]
 bytes_req = {
     "AES-128": 16,
@@ -76,22 +71,22 @@ def encriptacionArchivo(input_file: Optional[str], output_file: Optional[str], k
  
     if algorithm == "AES-256":
         try:
-
-            aes256.encrypt_file_aes_cbc_256(input_file, key_bytes, output_file)
+            aesCBC.encrypt_file_aes_cbc(input_file, key_bytes, 256, output_file)
+            #aes256.encrypt_file_aes_cbc_256(input_file, key_bytes, output_file)
         except AttributeError:
             print("[ENCRYPT] AES-256: Algoritmo AES-256 no encontrado en el modulo AES - adapta a tu implementacion")
     
     elif algorithm == "AES-128":
         try:
-
-            aes128.encrypt_file_aes_cbc_128(input_file, key_bytes, output_file)
+            aesCBC.encrypt_file_aes_cbc(input_file, key_bytes, 128, output_file)
+            #aes128.encrypt_file_aes_cbc_128(input_file, key_bytes, output_file)
         except AttributeError:
             print("[ENCRYPT] AES-128: Algoritmo AES-128 no encontrado en el modulo AES - adapta a tu implementacion")
     
     elif algorithm == "AES-192":
         try:
-
-            aes192.encrypt_file_aes_cbc_192(input_file, key_bytes, output_file)
+            aesCBC.encrypt_file_aes_cbc(input_file, key_bytes, 192, output_file)
+            #aes192.encrypt_file_aes_cbc_192(input_file, key_bytes, output_file)
         except AttributeError:
             print("[ENCRYPT] AES-256: Algoritmo AES-192 no encontrado en el modulo AES - adapta a tu implementacion")
     else:
