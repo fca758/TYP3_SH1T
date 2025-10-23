@@ -136,10 +136,8 @@ class AES_CBC():
         if not output_path:
             # Si el archivo termina en ".enc", quitamos esa extensión
             output_path = str(file_path)
-            if output_path.endswith(".enc"):
-                output_path = output_path[:-4]
-            else:
-                output_path += ".dec"
+            output_path = output_path[:-4]
+            output_path += ".dec"
 
         # --- Guardar el archivo descifrado ---
         with open(output_path, "wb") as f:

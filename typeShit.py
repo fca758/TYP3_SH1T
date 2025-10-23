@@ -113,21 +113,25 @@ def desencriptarArchivo(input_file: Optional[str], output_file: Optional[str], k
     if algorithm == "AES-256":
         try:
 
-            aes256.decrypt_file_aes_cbc_256(input_file, key_bytes, output_file)
+            aesCBC.decrypt_file_aes_cbc(file_path=input_file, key=key_bytes, key_length_bits=256, output_path=output_file)
+            #aes256.decrypt_file_aes_cbc_256(input_file, key_bytes, output_file)
         except AttributeError:
             print("[DECRYPT] AES-256: decrypt_file_aes_cbc_256 not found on AES module — adapt to your implementation")
-    elif algorithm == "AES-128":
-        try:
-
-            aes128.decrypt_file_aes_cbc_128(input_file, key_bytes, output_file)
-        except AttributeError:
-            print("[ENCRYPT] AES-128: Algoritmo AES-128 no encontrado en el modulo AES - adapta a tu implementacion")
     elif algorithm == "AES-192":
 
         try:
-            aes192.decrypt_file_aes_cbc_192(input_file, key_bytes, output_file)
+
+            aesCBC.decrypt_file_aes_cbc(file_path=input_file, key=key_bytes, key_length_bits=192, output_path=output_file)
+            #aes192.decrypt_file_aes_cbc_192(input_file, key_bytes, output_file)
         except AttributeError:
             print("[ENCRYPT] AES-256: Algoritmo AES-192 no encontrado en el modulo AES - adapta a tu implementacion")
+    elif algorithm == "AES-128":
+        try:
+
+            aesCBC.decrypt_file_aes_cbc(file_path=input_file, key=key_bytes, key_length_bits=128, output_path=output_file)
+            #aes128.decrypt_file_aes_cbc_128(input_file, key_bytes, output_file)
+        except AttributeError:
+            print("[ENCRYPT] AES-128: Algoritmo AES-128 no encontrado en el modulo AES - adapta a tu implementacion")
     else:
         raise NotSupportedAlgoritm(f"Algorithm '{algorithm}' is not supported")
 
@@ -140,13 +144,8 @@ def generadorDeClave(algorithm: Optional[str]) -> bytes:
     import os
     import binascii
 
-    required = {
-        "AES-128": 16,
-        "AES-192": 24,
-        "AES-256": 32,
-    }
 
-    req_len = required.get(algorithm)
+    req_len = bytes_req.get(algorithm)
     if req_len is None:
         raise NotSupportedAlgoritm(f"Algorithm '{algorithm}' is not supported")
 
