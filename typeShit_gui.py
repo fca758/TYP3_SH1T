@@ -10,7 +10,7 @@ import secrets
 
 
 # Importar algoritmos, si no funcioan entonces da un error
-from typeShit import encriptacionArchivo, desencriptarArchivo, generadorDeClave
+from typeShit import encriptacionArchivo, desencriptarArchivo, generadorDeClave, guardarClaveArchivo
 
 
 # Lista de algoritmos soportados
@@ -27,7 +27,7 @@ class App(tk.Tk):
     # Inicialización de la ventana
     def __init__(self) -> None:
         super().__init__()
-        self.title("TYP3_SH1T GUI")
+        self.title("TYP3_SH1T")
         self.geometry(f"{self.WINDOW_W}x{self.WINDOW_H}")
         self.resizable(False, False)
 
@@ -205,7 +205,7 @@ class App(tk.Tk):
             sys.stdout = buf
             if action == "encrypt":
 
-
+                guardarClaveArchivo(key)
                 #ENCRIPTACIÓN DEL ARCHIVO
                 encriptacionArchivo(input_file=infile, output_file=None,mode=mode, key=key, algorithm=algo)
             else:
