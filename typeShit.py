@@ -4,10 +4,10 @@ import binascii
 import re
 import secrets
 
-from aes import AES_CBC
+from aes import AES
 
 
-aesCBC = AES_CBC()
+aesCBC = AES()
 aesAlgoritmos = ["AES-128", "AES-192", "AES-256"]
 bytes_req = {
     "AES-128": 16,
@@ -74,7 +74,7 @@ def encriptacionArchivo(input_file: str, output_file: Optional[str],mode: str, k
         case "AES-256":
             try:
 
-                aesCBC.encrypt_file_aes_cbc(file_path=input_file, modeAES=mode, key_length_bits=256, key=key_bytes, output_path=output_file)
+                aesCBC.encriptar_archivo_AES(file_path=input_file, modeAES=mode, key_length_bits=256, key=key_bytes, output_path=output_file)
                 #aes256.decrypt_file_aes_cbc_256(input_file, key_bytes, output_file)
             except AttributeError:
                 print("[DECRYPT] AES-256: decrypt_file_aes_cbc_256 not found on AES module — adapt to your implementation")
@@ -82,14 +82,14 @@ def encriptacionArchivo(input_file: str, output_file: Optional[str],mode: str, k
         case "AES-192":
             try:
 
-                aesCBC.encrypt_file_aes_cbc(file_path=input_file,modeAES=mode, key=key_bytes, key_length_bits=192, output_path=output_file)
+                aesCBC.encriptar_archivo_AES(file_path=input_file,modeAES=mode, key=key_bytes, key_length_bits=192, output_path=output_file)
                 #aes192.decrypt_file_aes_cbc_192(input_file, key_bytes, output_file)
             except AttributeError:
                 print("[ENCRYPT] AES-256: Algoritmo AES-192 no encontrado en el modulo AES - adapta a tu implementacion")
         case "AES-128":
             try:
 
-                aesCBC.encrypt_file_aes_cbc(file_path=input_file,modeAES=mode, key=key_bytes, key_length_bits=128, output_path=output_file)
+                aesCBC.encriptar_archivo_AES(file_path=input_file,modeAES=mode, key=key_bytes, key_length_bits=128, output_path=output_file)
                 #aes128.decrypt_file_aes_cbc_128(input_file, key_bytes, output_file)
             except AttributeError:
                 print("[ENCRYPT] AES-128: Algoritmo AES-128 no encontrado en el modulo AES - adapta a tu implementacion")
@@ -118,7 +118,7 @@ def desencriptarArchivo(input_file: str, output_file: Optional[str],mode: str, k
         case "AES-256":
             try:
 
-                aesCBC.decrypt_file_aes_cbc(file_path=input_file, modeAES=mode, key=key_bytes, key_length_bits=256, output_path=output_file)
+                aesCBC.desencriptar_archivo_AES(file_path=input_file, modeAES=mode, key=key_bytes, key_length_bits=256, output_path=output_file)
                 #aes256.decrypt_file_aes_cbc_256(input_file, key_bytes, output_file)
             except AttributeError:
                 print("[DECRYPT] AES-256: decrypt_file_aes_cbc_256 not found on AES module — adapt to your implementation")
@@ -126,14 +126,14 @@ def desencriptarArchivo(input_file: str, output_file: Optional[str],mode: str, k
         case "AES-192":
             try:
 
-                aesCBC.decrypt_file_aes_cbc(file_path=input_file, modeAES=mode, key=key_bytes, key_length_bits=192, output_path=output_file)
+                aesCBC.desencriptar_archivo_AES(file_path=input_file, modeAES=mode, key=key_bytes, key_length_bits=192, output_path=output_file)
                 #aes192.decrypt_file_aes_cbc_192(input_file, key_bytes, output_file)
             except AttributeError:
                 print("[ENCRYPT] AES-256: Algoritmo AES-192 no encontrado en el modulo AES - adapta a tu implementacion")
         case "AES-128":
             try:
 
-                aesCBC.decrypt_file_aes_cbc(file_path=input_file, modeAES=mode, key=key_bytes, key_length_bits=128, output_path=output_file)
+                aesCBC.desencriptar_archivo_AES(file_path=input_file, modeAES=mode, key=key_bytes, key_length_bits=128, output_path=output_file)
                 #aes128.decrypt_file_aes_cbc_128(input_file, key_bytes, output_file)
             except AttributeError:
                 print("[ENCRYPT] AES-128: Algoritmo AES-128 no encontrado en el modulo AES - adapta a tu implementacion")

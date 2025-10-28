@@ -4,11 +4,11 @@ from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.backends import default_backend
 import secrets
 
-class AES_CBC():
+class AES():
     def __init__(self):
         pass
 
-    def encrypt_file_aes_cbc(self, file_path: str,modeAES: str, key: bytes, key_length_bits: int, output_path: str = None):
+    def encriptar_archivo_AES(self, file_path: str,modeAES: str, key: bytes, key_length_bits: int, output_path: str = None):
         """
         Cifra un archivo usando AES en modo CBC con padding PKCS7.
         
@@ -44,7 +44,7 @@ class AES_CBC():
         iv = secrets.token_bytes(16)
 
 
-        # --- Configurar el objeto de cifrado AES + CBC ---
+        # --- Configurar el objeto de cifrado AES ---
         backend = default_backend()
 
         modeCipher = modes
@@ -90,7 +90,7 @@ class AES_CBC():
 
         print(f"Archivo cifrado correctamente usando AES-{key_length_bits} bits → {output_path}")
 
-    def decrypt_file_aes_cbc(self, file_path: str,modeAES : str, key: bytes, key_length_bits: int, output_path: str = None):
+    def desencriptar_archivo_AES(self, file_path: str,modeAES : str, key: bytes, key_length_bits: int, output_path: str = None):
         """
         Descifra un archivo cifrado con AES en modo CBC con padding PKCS7.
         
