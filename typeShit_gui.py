@@ -6,15 +6,16 @@ import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from typing import Optional
-
+import secrets
 
 
 # Importar algoritmos, si no funcioan entonces da un error
-from typeShit import encriptacionArchivo, desencriptarArchivo, generadorDeClave
+from typeShit import encriptacionArchivo, desencriptarArchivo, generadorDeClave, guardarClaveArchivo
 
 
 # Lista de algoritmos soportados
-algoritmos = ["AES-128", "AES-192", "AES-256"]
+AES_names = ["AES-128", "AES-192", "AES-256"]
+AES_modes = ["CBC", "CFB", "OFB"]
 
 
 # Clase principal de la aplicación
@@ -26,7 +27,7 @@ class App(tk.Tk):
     # Inicialización de la ventana
     def __init__(self) -> None:
         super().__init__()
-        self.title("TYP3_SH1T GUI")
+        self.title("TYP3_SH1T")
         self.geometry(f"{self.WINDOW_W}x{self.WINDOW_H}")
         self.resizable(False, False)
 
@@ -130,8 +131,14 @@ class App(tk.Tk):
         # Input de seleccion de algoritmo
         tk.Label(parent, text="Algoritmo:", bg=label_bg, fg=label_fg).grid(column=0, row=1, sticky=tk.W)
         self.algorithm_var = tk.StringVar(value="AES-128")
-        algo_combo = ttk.Combobox(parent, textvariable=self.algorithm_var, values=algoritmos, state="readonly", width=12, style='Custom.TCombobox')
+        algo_combo = ttk.Combobox(parent, textvariable=self.algorithm_var, values=AES_names, state="readonly", width=12, style='Custom.TCombobox')
         algo_combo.grid(column=1, row=1, sticky=tk.W)
+        
+        # Input de modo (dependiendo del algoritmo tendrá diferentes opciones)
+        tk.Label(parent, text="Modo:", bg=label_bg, fg=label_fg).grid(column=1, row=1, sticky=tk.E, padx=(200,0))
+        self.mode_var = tk.StringVar(value="Selecciona")
+        mode_combo = ttk.Combobox(parent, textvariable=self.mode_var, values=AES_modes, state="readonly", width=12, style='Custom.TCombobox')
+        mode_combo.grid(column=2, row=1, sticky=tk.E)
 
         # Input de seleccion de archivo
         tk.Label(parent, text="Archivo entrada:", bg=label_bg, fg=label_fg).grid(column=0, row=2, sticky=tk.W)
@@ -179,11 +186,18 @@ class App(tk.Tk):
         algo = self.algorithm_var.get()
         infile = self.input_var.get() or None
         key = self.key_var.get() or None
+        mode = self.mode_var.get()
 
         if not infile:
             messagebox.showwarning("Falta archivo", "Debes seleccionar un archivo de entrada.")
             return
-
+        if mode == "Selecciona":
+            messagebox.showwarning("Falta modo", "Debes seleccionar un modo de operación.")
+            return
+        if not key:
+            messagebox.showwarning("Falta clave", "Debes proporcionar una clave.")
+            return
+        
         # Capturar stdout de las funciones llamadas para mostrar en la GUI
         buf = io.StringIO()
         old_stdout = sys.stdout
@@ -191,14 +205,14 @@ class App(tk.Tk):
             sys.stdout = buf
             if action == "encrypt":
 
-
+                guardarClaveArchivo(key)
                 #ENCRIPTACIÓN DEL ARCHIVO
-                encriptacionArchivo(infile, None, key, algorithm=algo)
+                encriptacionArchivo(input_file=infile, output_file=None,mode=mode, key=key, algorithm=algo)
             else:
 
 
                 #DESENCRIPTACIÓN DEL ARCHIVO
-                desencriptarArchivo(infile, None, key, algorithm=algo)
+                desencriptarArchivo(input_file=infile, output_file=None,mode=mode, key=key, algorithm=algo)
         except Exception as e:
             messagebox.showerror("Error", f"Ocurrió un error al ejecutar la acción: {e}")
         finally:
@@ -232,7 +246,7 @@ class App(tk.Tk):
             try:
                 sizes = {"AES-128": 16, "AES-192": 24, "AES-256": 32}
                 n = sizes.get(algorithm, 16)
-                key_bytes = os.urandom(n)
+                key_bytes = secrets.token_bytes(n)
                 key_hex = key_bytes.hex()
                 self.output_txt.insert(tk.END, f"[Keygen fallback] Generated {n} bytes\n")
             except Exception:

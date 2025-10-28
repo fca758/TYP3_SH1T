@@ -142,4 +142,7 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
+# Archivo de llaves
+
+Keys/keys.txt
 # End of standard Python .gitignore
