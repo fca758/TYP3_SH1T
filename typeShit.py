@@ -4,7 +4,7 @@ import binascii
 import re
 import secrets
 
-from aesCBC import AES_CBC
+from aes import AES_CBC
 
 
 aesCBC = AES_CBC()
