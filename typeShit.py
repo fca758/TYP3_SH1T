@@ -1,9 +1,10 @@
 from __future__ import annotations
-
 from typing import Optional, Union
+import binascii
 import re
-from aesCBC import AES_CBC
+import secrets
 
+from aesCBC import AES_CBC
 
 
 aesCBC = AES_CBC()
@@ -145,15 +146,12 @@ def generadorDeClave(algorithm: Optional[str]) -> bytes:
     if algorithm is None:
         raise NotSupportedAlgoritm("No algorithm specified")
 
-    import os
-    import binascii
-
 
     req_len = bytes_req.get(algorithm)
     if req_len is None:
         raise NotSupportedAlgoritm(f"Algorithm '{algorithm}' is not supported")
 
-    key = os.urandom(req_len)
+    key = secrets.token_bytes(req_len)
     hexk = binascii.hexlify(key).decode("utf-8")
     print(f"[KEYGEN] Generated key for {algorithm}: {hexk}")
 
