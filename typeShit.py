@@ -157,12 +157,7 @@ def generadorDeClave(algorithm: Optional[str]) -> bytes:
 
     return key
 
-def guardarClaveArchivo(key: str) -> None:
 
-    file_path = "Keys\\keys.txt"
-    with open(file_path, 'a') as f:
-        f.write(key)
-        f.write("\n")
 
 class NotSupportedAlgoritm(Exception):
     def __init__(self, *args):

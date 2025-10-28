@@ -10,8 +10,7 @@ import secrets
 
 
 # Importar algoritmos, si no funcioan entonces da un error
-from typeShit import encriptacionArchivo, desencriptarArchivo, generadorDeClave, guardarClaveArchivo
-
+from typeShit import encriptacionArchivo, desencriptarArchivo, generadorDeClave
 
 # Lista de algoritmos soportados
 AES_names = ["AES-128", "AES-192", "AES-256"]
@@ -205,7 +204,6 @@ class App(tk.Tk):
             sys.stdout = buf
             if action == "encrypt":
 
-                guardarClaveArchivo(key)
                 #ENCRIPTACIÓN DEL ARCHIVO
                 encriptacionArchivo(input_file=infile, output_file=None,mode=mode, key=key, algorithm=algo)
             else:

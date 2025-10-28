@@ -73,6 +73,7 @@ class AES():
         # --- Cifrar los datos ---
         ciphertext = encryptor.update(padded_data) + encryptor.finalize()
 
+        guardarClaveArchivo(key, iv)
         # --- Generar ruta de salida ---
         if not output_path:
             output_path = str(file_path) + ".enc"
@@ -182,3 +183,9 @@ class AES():
             pass
 
         print(f"Archivo descifrado correctamente usando AES-{key_length_bits} bits → {output_path}")
+
+def guardarClaveArchivo(key: str, iv: str) -> None:
+
+    file_path = "Keys\\keys.txt"
+    with open(file_path, 'a') as f:
+        f.write(f"Key: {key.hex()} | IV: {iv.hex()}\n")
