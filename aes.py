@@ -47,21 +47,8 @@ class AES():
         # --- Configurar el objeto de cifrado AES ---
         backend = default_backend()
 
-        modeCipher = modes
+        modeCipher = obtenerModoAES(modeAES)
 
-
-        match modeAES:
-            case "CBC":  
-                modeCipher = modes.CBC(iv)
-            
-            case "CFB":
-                modeCipher = modes.CFB(iv)
-        
-            case "OFB":
-                modeCipher = modes.OFB(iv)
-            case _:
-                raise ValueError(f"Modo de cifrado no soportado: {modeAES}")
-     
         cipher = Cipher(algorithms.AES(key), modeCipher, backend=backend)
         encryptor = cipher.encryptor()
 
@@ -137,21 +124,10 @@ class AES():
         # --- Configurar el objeto de descifrado AES + CBC ---
         backend = default_backend()
 
-        modeCipher = modes
+        modeCipher = obtenerModoAES(modeAES)
 
 
-        match modeAES:
-            case "CBC":  
-                modeCipher = modes.CBC(iv)
-            
-            case "CFB":
-                modeCipher = modes.CFB(iv)
-        
-            case "OFB":
-                modeCipher = modes.OFB(iv)
-            case _:
-                raise ValueError(f"Modo de cifrado no soportado: {modeAES}")
-     
+             
         cipher = Cipher(algorithms.AES(key), modeCipher, backend=backend)   
         decryptor = cipher.decryptor()
 
@@ -189,3 +165,15 @@ def guardarClaveArchivo(key: str, iv: str) -> None:
     file_path = "Keys\\keys.txt"
     with open(file_path, 'a') as f:
         f.write(f"Key: {key.hex()} | IV: {iv.hex()}\n")
+
+
+def obtenerModoAES(mode: str):
+    match mode:
+        case "CBC":
+            return modes.CBC
+        case "CFB":
+            return modes.CFB
+        case "OFB":
+            return modes.OFB
+        case _:
+            raise ValueError(f"Modo de cifrado no soportado: {mode}")
