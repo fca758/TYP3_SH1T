@@ -153,13 +153,15 @@ class App(tk.Tk):
         key_entry.grid(column=1, row=3, columnspan=2, sticky=tk.W)
 
         # Botón para generar clave (a la derecha del campo clave)
-        gen_btn = tk.Button(parent, text="Generar", command=lambda: self.on_generar_clave(self.algorithm_var.get()), bg=button_bg, fg=button_fg)
+        gen_btn = tk.Button(parent, text="Generar", command=lambda: self.generarClave(self.algorithm_var.get()), bg=button_bg, fg=button_fg)
         gen_btn.grid(column=3, row=3, sticky=tk.W)
 
         # Botón de ejecutar
         run_btn = tk.Button(parent, text="Ejecutar", command=self.run_action, bg=button_bg, fg=button_fg)
         run_btn.grid(column=1, row=4, pady=(8, 8), sticky=tk.W)
 
+        key_get = tk.Button(parent, text="Buscar clave guardada", command=lambda: self.generarClave(self.algorithm_var.get()), bg=button_bg, fg=button_fg)
+        key_get.grid(column=2, row=4, pady=(8, 8), sticky=tk.W)
 
         # Salida de consola
         tk.Label(parent, text="Salida:", bg=label_bg, fg=label_fg).grid(column=0, row=5, sticky=tk.NW)
@@ -220,7 +222,7 @@ class App(tk.Tk):
         self.output_txt.delete("1.0", tk.END)
         self.output_txt.insert(tk.END, output)
 
-    def on_generar_clave(self, algorithm: Optional[str] = None) -> None:
+    def generarClave(self, algorithm: Optional[str] = None) -> None:
 
         if algorithm is None:
             algorithm = self.algorithm_var.get()
@@ -239,29 +241,21 @@ class App(tk.Tk):
 
         key_hex = key_val.hex() if key_val is not None else None
 
-        if key_val is None:
-            # Error al generar clave - fallback a clave aleatoria
-            try:
-                sizes = {"AES-128": 16, "AES-192": 24, "AES-256": 32}
-                n = sizes.get(algorithm, 16)
-                key_bytes = secrets.token_bytes(n)
-                key_hex = key_bytes.hex()
-                self.output_txt.insert(tk.END, f"[Keygen fallback] Generated {n} bytes\n")
-            except Exception:
-                pass
+    
+        # Colocar la clave generada en el campo de texto y en la salida
+        try:
+            self.key_var.set(key_hex)
+        except Exception:
+            pass
+        try:
+            self.output_txt.insert(tk.END, f"Generated key ({algorithm}): {key_hex}\n")
+        except Exception:
+            pass
 
-
-        else:
-            # Colocar la clave generada en el campo de texto y en la salida
-            try:
-                self.key_var.set(key_hex)
-            except Exception:
-                pass
-            try:
-                self.output_txt.insert(tk.END, f"Generated key ({algorithm}): {key_hex}\n")
-            except Exception:
-                pass
-
+    def buscarClaveGuardada(self) -> None:
+        
+        
+        pass
 if __name__ == "__main__":
     app = App()
     app.mainloop()

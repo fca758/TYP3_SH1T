@@ -151,9 +151,7 @@ def generadorDeClave(algorithm: Optional[str]) -> bytes:
     if req_len is None:
         raise NotSupportedAlgoritm(f"Algorithm '{algorithm}' is not supported")
 
-    key = secrets.token_bytes(req_len)
-    hexk = binascii.hexlify(key).decode("utf-8")
-    print(f"[KEYGEN] Generated key for {algorithm}: {hexk}")
+    key = secrets.token_bytes(req_len)   
 
     return key
 

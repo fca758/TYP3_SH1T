@@ -47,7 +47,7 @@ class AES():
         # --- Configurar el objeto de cifrado AES ---
         backend = default_backend()
 
-        modeCipher = obtenerModoAES(modeAES)
+        modeCipher = obtenerModoAES(modeAES, iv)
 
         cipher = Cipher(algorithms.AES(key), modeCipher, backend=backend)
         encryptor = cipher.encryptor()
@@ -167,13 +167,13 @@ def guardarClaveArchivo(key: str, iv: str) -> None:
         f.write(f"Key: {key.hex()} | IV: {iv.hex()}\n")
 
 
-def obtenerModoAES(mode: str):
+def obtenerModoAES(mode: str, iv: bytes):
     match mode:
         case "CBC":
-            return modes.CBC
+            return modes.CBC(iv)
         case "CFB":
-            return modes.CFB
+            return modes.CFB(iv)
         case "OFB":
-            return modes.OFB
+            return modes.OFB(iv)
         case _:
             raise ValueError(f"Modo de cifrado no soportado: {mode}")

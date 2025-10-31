@@ -142,9 +142,7 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
-# Archivo de llaves
-
-Keys/*
-Keys/keys.txt
+# Archivo raro
+tempCodeRunnerFile.py
 
 # End of standard Python .gitignore
