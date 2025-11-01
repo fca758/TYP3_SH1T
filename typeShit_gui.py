@@ -10,8 +10,7 @@ import secrets
 
 
 # Importar algoritmos, si no funcioan entonces da un error
-from typeShit import encriptacionArchivo, desencriptarArchivo, generadorDeClave, guardarClaveArchivo
-
+from typeShit import encriptacionArchivo, desencriptarArchivo, generadorDeClave, get_stored_keys
 
 # Lista de algoritmos soportados
 AES_names = ["AES-128", "AES-192", "AES-256"]
@@ -154,13 +153,18 @@ class App(tk.Tk):
         key_entry.grid(column=1, row=3, columnspan=2, sticky=tk.W)
 
         # Botón para generar clave (a la derecha del campo clave)
-        gen_btn = tk.Button(parent, text="Generar", command=lambda: self.on_generar_clave(self.algorithm_var.get()), bg=button_bg, fg=button_fg)
+        gen_btn = tk.Button(parent, text="Generar", command=lambda: self.generarClave(self.algorithm_var.get()), bg=button_bg, fg=button_fg)
         gen_btn.grid(column=3, row=3, sticky=tk.W)
+
+        # Variable para almacenar el IV asociado (hex)
+        self.iv_var = tk.StringVar()
 
         # Botón de ejecutar
         run_btn = tk.Button(parent, text="Ejecutar", command=self.run_action, bg=button_bg, fg=button_fg)
         run_btn.grid(column=1, row=4, pady=(8, 8), sticky=tk.W)
 
+        key_get = tk.Button(parent, text="Buscar clave guardada", command=self.buscarClaveGuardada, bg=button_bg, fg=button_fg)
+        key_get.grid(column=2, row=4, pady=(8, 8), sticky=tk.W)
 
         # Salida de consola
         tk.Label(parent, text="Salida:", bg=label_bg, fg=label_fg).grid(column=0, row=5, sticky=tk.NW)
@@ -197,6 +201,28 @@ class App(tk.Tk):
         if not key:
             messagebox.showwarning("Falta clave", "Debes proporcionar una clave.")
             return
+        # Validación básica de formato/longitud de la clave (hex) según algoritmo
+        expected_hex_len = None
+        if algo == "AES-128":
+            expected_hex_len = 16 * 2
+        elif algo == "AES-192":
+            expected_hex_len = 24 * 2
+        elif algo == "AES-256":
+            expected_hex_len = 32 * 2
+
+        # Si la clave parece hexadecimal, verificar longitud
+        key_is_hex = False
+        try:
+            # strip possible spaces
+            kstr = key.strip()
+            if all(c in "0123456789abcdefABCDEF" for c in kstr):
+                key_is_hex = True
+        except Exception:
+            key_is_hex = False
+
+        if expected_hex_len and key_is_hex and len(kstr) != expected_hex_len:
+            messagebox.showwarning("Clave inválida", f"La clave hexadecimal debe tener {expected_hex_len} caracteres para {algo} (ah tienes {len(kstr)}).")
+            return
         
         # Capturar stdout de las funciones llamadas para mostrar en la GUI
         buf = io.StringIO()
@@ -204,15 +230,38 @@ class App(tk.Tk):
         try:
             sys.stdout = buf
             if action == "encrypt":
-
-                guardarClaveArchivo(key)
-                #ENCRIPTACIÓN DEL ARCHIVO
-                encriptacionArchivo(input_file=infile, output_file=None,mode=mode, key=key, algorithm=algo)
+                # ENCRIPTACIÓN DEL ARCHIVO
+                try:
+                    iv = encriptacionArchivo(input_file=infile, output_file=None, mode=mode, key=key, algorithm=algo)
+                    # Guardar IV en la GUI (hex) si se generó
+                    if iv:
+                        try:
+                            self.iv_var.set(iv.hex())
+                            print(f"IV generado: {iv.hex()}")
+                        except Exception:
+                            pass
+                except Exception as e:
+                    # Mostrar traceback completo en la salida para depuración
+                    import traceback
+                    traceback.print_exc()
+                    raise
             else:
+                # DESENCRIPTACIÓN DEL ARCHIVO
+                # obtener iv desde la variable (si existe)
+                iv_hex = self.iv_var.get() or None
+                iv_bytes = None
+                if iv_hex:
+                    try:
+                        iv_bytes = bytes.fromhex(iv_hex)
+                    except Exception:
+                        iv_bytes = None
 
-
-                #DESENCRIPTACIÓN DEL ARCHIVO
-                desencriptarArchivo(input_file=infile, output_file=None,mode=mode, key=key, algorithm=algo)
+                try:
+                    desencriptarArchivo(input_file=infile, output_file=None, mode=mode, key=key, iv=iv_bytes, algorithm=algo)
+                except Exception:
+                    import traceback
+                    traceback.print_exc()
+                    raise
         except Exception as e:
             messagebox.showerror("Error", f"Ocurrió un error al ejecutar la acción: {e}")
         finally:
@@ -222,7 +271,7 @@ class App(tk.Tk):
         self.output_txt.delete("1.0", tk.END)
         self.output_txt.insert(tk.END, output)
 
-    def on_generar_clave(self, algorithm: Optional[str] = None) -> None:
+    def generarClave(self, algorithm: Optional[str] = None) -> None:
 
         if algorithm is None:
             algorithm = self.algorithm_var.get()
@@ -241,29 +290,135 @@ class App(tk.Tk):
 
         key_hex = key_val.hex() if key_val is not None else None
 
-        if key_val is None:
-            # Error al generar clave - fallback a clave aleatoria
-            try:
-                sizes = {"AES-128": 16, "AES-192": 24, "AES-256": 32}
-                n = sizes.get(algorithm, 16)
-                key_bytes = secrets.token_bytes(n)
-                key_hex = key_bytes.hex()
-                self.output_txt.insert(tk.END, f"[Keygen fallback] Generated {n} bytes\n")
-            except Exception:
-                pass
+    
+        # Colocar la clave generada en el campo de texto y en la salida
+        try:
+            self.key_var.set(key_hex)
+        except Exception:
+            pass
+        try:
+            self.output_txt.insert(tk.END, f"Generated key ({algorithm}): {key_hex}\n")
+        except Exception:
+            pass
+
+    def buscarClaveGuardada(self) -> None:
+        """Muestra un diálogo con las claves guardadas y permite seleccionar una."""
+        try:
+            stored_keys = get_stored_keys()
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al leer claves guardadas: {e}")
+            return
+
+        if not stored_keys:
+            messagebox.showinfo("Sin claves", "No hay claves guardadas.")
+            return
+
+        # Heredar estilos de la ventana principal
+        label_bg = None if self.panel_image is not None else "#222222"
+        label_fg = "#79b670" if self.panel_image is None else "#000000"
+        entry_bg = "#c39c9c" if self.panel_image is not None else "#333333"
+        entry_fg = "#000000" if self.panel_image is not None else "#ffffff"
+        button_bg = "#3a8b8a" if self.panel_image is None else None
+        button_fg = "#000000"
+
+        # Crear diálogo de selección
+        dialog = tk.Toplevel(self)
+        dialog.title("Claves guardadas")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg=label_bg)
+
+        # Lista de claves
+        frame = tk.Frame(dialog, bg=label_bg, padx=10, pady=10)
+        frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        # Headers
+        tk.Label(frame, text="Fecha", bg=label_bg, fg=label_fg).grid(row=0, column=0, padx=5)
+        tk.Label(frame, text="Algoritmo", bg=label_bg, fg=label_fg).grid(row=0, column=1, padx=5)
+        tk.Label(frame, text="Modo", bg=label_bg, fg=label_fg).grid(row=0, column=2, padx=5)
+        tk.Label(frame, text="Clave", bg=label_bg, fg=label_fg).grid(row=0, column=3, padx=5)
 
 
-        else:
-            # Colocar la clave generada en el campo de texto y en la salida
+        # Función para eliminar una clave
+        def delete_key(entry):
+            # Eliminar la entrada del almacén y refrescar el diálogo
             try:
-                self.key_var.set(key_hex)
-            except Exception:
-                pass
-            try:
-                self.output_txt.insert(tk.END, f"Generated key ({algorithm}): {key_hex}\n")
-            except Exception:
-                pass
+                from typeShit import get_stored_keys, KEYS_FILE, _encrypt_keys_file, _decrypt_keys_file
+                _decrypt_keys_file()
+                entries = []
+                if KEYS_FILE.exists():
+                    import json
+                    with open(KEYS_FILE, "r") as f:
+                        content = f.read().strip()
+                        if content:
+                            entries = json.loads(content)
+                # Filtrar fuera la entrada a eliminar
+                entries = [e for e in entries if not (
+                    e.get("key") == entry["key"] and
+                    e.get("algorithm") == entry["algorithm"] and
+                    e.get("mode") == entry["mode"] and
+                    e.get("timestamp") == entry["timestamp"]
+                )]
+                # Guardar actualizado
+                with open(KEYS_FILE, "w") as f:
+                    json.dump(entries, f, indent=2)
+                _encrypt_keys_file()
+                if KEYS_FILE.exists():
+                    KEYS_FILE.unlink()
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo eliminar la clave: {e}")
+            # Refrescar el diálogo
+            dialog.destroy()
+            self.buscarClaveGuardada()
 
+        # Función para seleccionar una clave
+        def select_key(entry):
+            self.algorithm_var.set(entry["algorithm"])
+            self.mode_var.set(entry["mode"])
+            self.key_var.set(entry["key"])
+            # Actualizar IV en la GUI (hex) para usar en desencriptación
+            if entry.get("iv"):
+                try:
+                    self.iv_var.set(entry.get("iv"))
+                    try:
+                        self.selected_iv = bytes.fromhex(entry.get("iv"))
+                    except Exception:
+                        self.selected_iv = None
+                except Exception:
+                    pass
+            else:
+                self.iv_var.set("")
+                self.selected_iv = None
+            self.output_txt.delete("1.0", tk.END)
+            self.output_txt.insert(tk.END, f"Clave seleccionada:\n")
+            self.output_txt.insert(tk.END, f"  Fecha: {entry['timestamp']}\n")
+            self.output_txt.insert(tk.END, f"  Algoritmo: {entry['algorithm']}\n")
+            self.output_txt.insert(tk.END, f"  Modo: {entry['mode']}\n")
+            self.output_txt.insert(tk.END, f"  Clave: {entry['key']}\n")
+            if entry.get("iv"):
+                self.output_txt.insert(tk.END, f"  IV: {entry['iv']}\n")
+            dialog.destroy()
+
+        # Mostrar claves
+        for i, entry in enumerate(stored_keys, 1):
+            tk.Label(frame, text=entry["timestamp"][:16], bg=label_bg, fg=label_fg).grid(row=i, column=0, padx=5)
+            tk.Label(frame, text=entry["algorithm"], bg=label_bg, fg=label_fg).grid(row=i, column=1, padx=5)
+            tk.Label(frame, text=entry["mode"], bg=label_bg, fg=label_fg).grid(row=i, column=2, padx=5)
+            key_preview = entry["key"][:16] + "..."
+            tk.Label(frame, text=key_preview, bg=label_bg, fg=label_fg).grid(row=i, column=3, padx=5)
+            tk.Button(frame, text="Seleccionar", command=lambda e=entry: select_key(e), bg=button_bg, fg=button_fg).grid(row=i, column=4, padx=5)
+            tk.Button(frame, text="Eliminar", command=lambda e=entry: delete_key(e), bg="#c0392b", fg="white").grid(row=i, column=5, padx=5)
+
+        # Botón de cerrar
+        tk.Button(frame, text="Cerrar", command=dialog.destroy, bg=button_bg, fg=button_fg).grid(row=len(stored_keys)+1, column=0, columnspan=5, pady=10)
+
+        # Centrar diálogo
+        dialog.update_idletasks()
+        width = dialog.winfo_width()
+        height = dialog.winfo_height()
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f"{width}x{height}+{x}+{y}")
 if __name__ == "__main__":
     app = App()
     app.mainloop()

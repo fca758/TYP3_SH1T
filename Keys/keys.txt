@@ -1,5 +1,0 @@
-// Guardar claves 
-// TODO: no poner repetidos, mejorar formato para entender mejor cuando se ha usado una clave.
-4e9685441fe32f452779205677eb20ac
-98636d0b5d93db0852517b2831423486
-8ce68983d9a93f679ca0106613ba397e
