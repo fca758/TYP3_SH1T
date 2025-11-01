@@ -8,7 +8,7 @@ class AES():
     def __init__(self):
         pass
 
-    def encriptar_archivo_AES(self, file_path: str,modeAES: str, key: bytes, key_length_bits: int, output_path: str = None):
+    def encriptar_archivo_AES(self, file_path: str,modeAES: str, key: bytes, key_length_bits: int, output_path: str = None) -> bytes:
         """
         Cifra un archivo usando AES en modo CBC con padding PKCS7.
         
@@ -18,6 +18,9 @@ class AES():
             key_length_bits (int): Longitud de clave en bits (por ejemplo 128, 192 o 256).
             output_path (str, opcional): Ruta donde guardar el archivo cifrado. 
                                          Si no se indica, se añade '.enc' al original.
+
+        Retorna:
+            bytes: El IV generado, para que pueda ser almacenado externamente.
 
         Excepciones:
             ValueError: Si la clave no coincide con la longitud de bits indicada.
@@ -60,15 +63,14 @@ class AES():
         # --- Cifrar los datos ---
         ciphertext = encryptor.update(padded_data) + encryptor.finalize()
 
-        guardarClaveArchivo(key, iv)
+        # La clave y el IV se gestionan externamente en typeShit.py
         # --- Generar ruta de salida ---
         if not output_path:
             output_path = str(file_path) + ".enc"
 
-        # --- Guardar IV + datos cifrados ---
-        # El IV no es secreto, pero debe almacenarse junto con el ciphertext.
+        # --- Guardar datos cifrados (sin IV en la cabecera) ---
         with open(output_path, "wb") as f:
-            f.write(iv + ciphertext)
+            f.write(ciphertext)
 
         # --- Intentar eliminar datos sensibles de memoria ---
         try:
@@ -77,14 +79,18 @@ class AES():
             pass
 
         print(f"Archivo cifrado correctamente usando AES-{key_length_bits} bits → {output_path}")
+        
+        # Devolver el IV para su almacenamiento externo
+        return iv
 
-    def desencriptar_archivo_AES(self, file_path: str,modeAES : str, key: bytes, key_length_bits: int, output_path: str = None):
+    def desencriptar_archivo_AES(self, file_path: str, modeAES: str, key: bytes, iv: bytes, key_length_bits: int, output_path: str = None):
         """
         Descifra un archivo cifrado con AES en modo CBC con padding PKCS7.
         
         Parámetros:
-            file_path (str): Ruta del archivo cifrado (debe contener IV + datos cifrados).
-            key (bytes): Clave de descifrado (misma usada para cifrar).
+            file_path (str): Ruta del archivo cifrado.
+            key (bytes): Clave de descifrado.
+            iv (bytes): Vector de inicialización usado en el cifrado.
             key_length_bits (int): Longitud de clave en bits (por ejemplo 128, 192 o 256).
             output_path (str, opcional): Ruta donde guardar el archivo descifrado. 
                                          Si no se indica, se eliminará la extensión '.enc'.
@@ -113,18 +119,12 @@ class AES():
             raise ValueError(f"El archivo '{file.name}' no parece ser un archivo cifrado válido (.enc).")
 
         # --- Leer todo el archivo cifrado ---
-        encrypted_data = file.read_bytes()
-
-        # --- Extraer IV (primeros 16 bytes) y ciphertext (resto) ---
-        if len(encrypted_data) <= 16:
-            raise ValueError("El archivo cifrado es demasiado pequeño o está corrupto.")
-        iv = encrypted_data[:16]
-        ciphertext = encrypted_data[16:]
+        ciphertext = file.read_bytes()
 
         # --- Configurar el objeto de descifrado AES + CBC ---
         backend = default_backend()
 
-        modeCipher = obtenerModoAES(modeAES)
+        modeCipher = obtenerModoAES(modeAES, iv)
 
 
              
@@ -160,11 +160,7 @@ class AES():
 
         print(f"Archivo descifrado correctamente usando AES-{key_length_bits} bits → {output_path}")
 
-def guardarClaveArchivo(key: str, iv: str) -> None:
-
-    file_path = "Keys\\keys.txt"
-    with open(file_path, 'a') as f:
-        f.write(f"Key: {key.hex()} | IV: {iv.hex()}\n")
+# Función eliminada ya que ahora la gestión de claves se hace en typeShit.py
 
 
 def obtenerModoAES(mode: str, iv: bytes):
