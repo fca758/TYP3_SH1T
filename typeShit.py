@@ -256,28 +256,18 @@ def encriptacionArchivo(input_file: str, output_file: Optional[str], mode: str, 
     # Si ya es bytes, se deja como está.
     key_bytes = _normalize_key(key, algorithm)
  
-
-    match algorithm:
-        case "AES-256":
-            try:
-                iv = aesCBC.encriptar_archivo_AES(file_path=input_file, modeAES=mode, key_length_bits=256, key=key_bytes, output_path=output_file)
-                store_key(key_bytes, iv, algorithm, mode)
-            except AttributeError:
-                print("[DECRYPT] AES-256: decrypt_file_aes_cbc_256 not found on AES module — adapt to your implementation")
-
-        case "AES-192":
-            try:
-                iv = aesCBC.encriptar_archivo_AES(file_path=input_file, modeAES=mode, key=key_bytes, key_length_bits=192, output_path=output_file)
-                store_key(key_bytes, iv, algorithm, mode)
-            except AttributeError:
-                print("[ENCRYPT] AES-256: Algoritmo AES-192 no encontrado en el modulo AES - adapta a tu implementacion")
-        case "AES-128":
-            try:
-                iv = aesCBC.encriptar_archivo_AES(file_path=input_file, modeAES=mode, key=key_bytes, key_length_bits=128, output_path=output_file)
-                store_key(key=key_bytes, iv=iv, algorithm=algorithm, mode=mode)
-            except AttributeError:
-                print("[ENCRYPT] AES-128: Algoritmo AES-128 no encontrado en el modulo AES - adapta a tu implementacion")
-
+    key_bytes_length = bytes_req.get(algorithm) * 8
+    
+    if key_bytes_length is None:
+        raise NotSupportedAlgoritm(f"Algorithm '{algorithm}' is not supported")
+    
+    try:
+        iv = aesCBC.encriptar_archivo_AES(file_path=input_file, modeAES=mode, key_length_bits=key_bytes_length, key=key_bytes, output_path=output_file)
+    except AttributeError:
+        print("[ENCRYPT] {algorithm}: Algoritmo no encontrado en el modulo AES - adapta a tu implementacion")
+    
+    store_key(key=key_bytes, iv=iv, algorithm=algorithm, mode=mode)
+        
     # Devolver el IV si se generó (útil para la GUI). Si no se generó, devolver None.
     try:
         return iv
