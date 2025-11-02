@@ -146,3 +146,5 @@ $RECYCLE.BIN/
 tempCodeRunnerFile.py
 
 # End of standard Python .gitignore
+Keys/keys.txt.enc
+Keys/keys.txt.key
