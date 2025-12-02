@@ -419,6 +419,3 @@ class App(tk.Tk):
         x = (dialog.winfo_screenwidth() // 2) - (width // 2)
         y = (dialog.winfo_screenheight() // 2) - (height // 2)
         dialog.geometry(f"{width}x{height}+{x}+{y}")
-if __name__ == "__main__":
-    app = App()
-    app.mainloop()
