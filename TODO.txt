@@ -1,0 +1,20 @@
+TAREAS A REALIZAR ENTREGA 4:
+
+- Un único nº de licencia para toda la app. este nº de licencia se puede guardar en un txt (IMPORTANTE)
+
+- Selección multiple NO FUNCIONA en el botón de cifrado múltiple (IMPORTANTE)
+
+- Comprobar cómo se guardan las claves para dada usuario
+
+- Cada usuario debe tener sus claves guardadas por RSA con su propia clave privada y pública
+
+- Realizar puntos 7, 8, 9
+
+- Mejorar la gestión de certificados (pq se puede cambiar el nº de licencia y eso no se debe hacer)
+
+- Poner fotos para los menús
+    * Gest. Cert.
+    * Buscar claves
+    * Encriptado Múlt
+
+- Hacer bonitos los ménus (lo último)
