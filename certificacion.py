@@ -18,6 +18,7 @@ AES_MODULE = AES()
 ROOT = Path("certs")
 USERS_DIR = ROOT / "users"
 CA_DIR = ROOT / "ca"
+LICENSE_FILE = ROOT / "license.txt"
 
 SEPARATOR = b"\n---CERTMETA-END---\n"
 
@@ -33,6 +34,21 @@ def _derive_key_from_license(license_number: str) -> bytes:
     # Simple derivation as requested: SHA-256 hash of license
     return hashlib.sha256(license_number.encode("utf-8")).digest()
 
+
+def get_license() -> str:
+    """Return the stored license number or raise FileNotFoundError if none."""
+    _ensure_dirs()
+    if not LICENSE_FILE.exists():
+        raise FileNotFoundError("License file not found")
+    return LICENSE_FILE.read_text(encoding="utf-8").strip()
+
+
+def has_ca() -> bool:
+    """Return True if CA public and private files exist."""
+    pub = CA_DIR / "ca_public.pem"
+    priv = CA_DIR / "ca_private.enc"
+    return pub.exists() and priv.exists()
+
 def _derive_key_from_password(password: str, salt: bytes) -> bytes:
     # PBKDF2 with reasonable iterations
     kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=100_000, backend=default_backend())
@@ -44,6 +60,16 @@ def create_ca(license_number: str, key_size: int = 2048) -> None:
     _ensure_dirs()
     priv_path = CA_DIR / "ca_private.enc"
     pub_path = CA_DIR / "ca_public.pem"
+
+    # Do not overwrite existing CA
+    if has_ca():
+        raise FileExistsError("Ya existe una CA configurada en esta instalación.")
+
+    # If license file exists, it must match the provided license
+    if LICENSE_FILE.exists():
+        existing = LICENSE_FILE.read_text(encoding="utf-8").strip()
+        if existing != license_number:
+            raise ValueError("Existe otro número de licencia en la instalación. No se permite cambiarlo.")
 
     # Generate RSA key
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=key_size)
@@ -78,6 +104,13 @@ def create_ca(license_number: str, key_size: int = 2048) -> None:
     except Exception:
         pass
 
+    # Store the license permanently (only if not present already)
+    try:
+        if not LICENSE_FILE.exists():
+            LICENSE_FILE.write_text(license_number, encoding="utf-8")
+    except Exception:
+        pass
+
 
 def _load_ca_public() -> serialization.PublicFormat:
     pub_path = CA_DIR / "ca_public.pem"
@@ -86,7 +119,7 @@ def _load_ca_public() -> serialization.PublicFormat:
     return serialization.load_pem_public_key(pub_path.read_bytes(), backend=default_backend())
 
 
-def _load_ca_private(license_number: str):
+def _load_ca_private(license_number: str = None):
     priv_path = CA_DIR / "ca_private.enc"
     if not priv_path.exists():
         raise FileNotFoundError("CA private key not found. Create CA first.")
@@ -100,6 +133,9 @@ def _load_ca_private(license_number: str):
         tf.write(ciphertext)
         tmp_enc = Path(tf.name)
 
+    # license_number may be omitted; read from stored license
+    if license_number is None:
+        license_number = get_license()
     key = _derive_key_from_license(license_number)
     # Decrypt to temp plaintext
     tmp_out = Path(str(tmp_enc) + ".dec")
@@ -117,7 +153,7 @@ def _load_ca_private(license_number: str):
     return priv
 
 
-def create_user(identity: str, password: str, license_number: str, key_size: int = 2048) -> None:
+def create_user(identity: str, password: str, license_number: str = None, key_size: int = 2048) -> None:
     """Genera par RSA para usuario, crea certificado firmado por CA y guarda clave privada cifrada por contraseña."""
     _ensure_dirs()
     fn = _safe_filename(identity)
@@ -131,7 +167,13 @@ def create_user(identity: str, password: str, license_number: str, key_size: int
     pub_pem = public_key.public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
     ident_bytes = identity.encode("utf-8")
 
-    # Sign with CA private
+    # Sign with CA private (use stored license if none provided)
+    if license_number is None:
+        try:
+            license_number = get_license()
+        except FileNotFoundError:
+            raise FileNotFoundError("No existe licencia/CA. Crea la CA primero desde la gestión de certificados.")
+
     ca_priv = _load_ca_private(license_number)
     signature = ca_priv.sign(pub_pem + ident_bytes, padding.PKCS1v15(), hashes.SHA256())
 

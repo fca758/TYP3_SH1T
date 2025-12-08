@@ -1,20 +1,51 @@
-TAREAS A REALIZAR ENTREGA 4:
+TAREAS A REALIZAR - ENTREGA 4 (ACTUALIZADO)
 
-- Un único nº de licencia para toda la app. este nº de licencia se puede guardar en un txt (IMPORTANTE)
+Estado actual: he integrado un sistema de certificados y la GUI; quedan ajustes funcionales y pruebas.
 
-- Selección multiple NO FUNCIONA en el botón de cifrado múltiple (IMPORTANTE)
+PRIORIDAD ALTA
+- [ ] Forzar un único número de licencia para toda la app y almacenarlo en `certs/license.txt`.
+    - Implementado: `certificacion.create_ca()` ahora escribe `certs/license.txt` y `certificacion.get_license()` lee el valor.
+    - Acción pendiente: Probar que no se puede crear/alterar la licencia desde la GUI (ya se deshabilitó el campo en la gestión).
 
-- Comprobar cómo se guardan las claves para dada usuario
+- [ ] Evitar sobrescribir la CA existente.
+    - Implementado: creación de CA falla si ya existe (`certificacion.has_ca()` evita overwrite).
 
-- Cada usuario debe tener sus claves guardadas por RSA con su propia clave privada y pública
+- [ ] Botón "Cifrado múltiple" con selección múltiple.
+    - Estado: el diálogo de selección múltiple permite selección múltiple (Listbox `selectmode=tk.MULTIPLE`).
+    - Acción pendiente: realizar pruebas E2E para verificar que el archivo se cifra correctamente para todos los seleccionados.
 
-- Realizar puntos 7, 8, 9
+MEDIO / VALIDACIÓN
+- [ ] Comprobar y documentar cómo se guardan las claves por usuario.
+    - Implementado: cada usuario tiene un par RSA generado; la clave pública se guarda en `certs/users/<ident>.cert` (JSON),
+      la clave privada se guarda cifrada en `certs/users/<ident>.key.enc` con estructura `salt(16)||iv(16)||ciphertext`.
+    - El cifrado de la clave privada usa PBKDF2 (100k iters) para derivar AES-256.
 
-- Mejorar la gestión de certificados (pq se puede cambiar el nº de licencia y eso no se debe hacer)
+- [ ] Asegurar que cada usuario tiene su par RSA privado/público y la privada está protegida por contraseña.
+    - Implementado: `certificacion.create_user()` cifra la privada con contraseña + salt.
 
-- Poner fotos para los menús
-    * Gest. Cert.
-    * Buscar claves
-    * Encriptado Múlt
+ALTA / REQUISITOS 7-9
+- [x] (7) Proteger claves privadas de cada usuario mediante contraseña (PBKDF2 + salt). — Implementado.
+- [x] (8) Solicitar contraseña al usuario autorizado para recuperar archivo/carpeta. — Implementado (GUI pide contraseña en desencriptación híbrida).
+- [x] (9) Tras introducir contraseña, recuperar la clave privada y usarla para descifrar el archivo. — Implementado.
 
-- Hacer bonitos los ménus (lo último)
+MEJORAS EN LA GESTIÓN DE CERTIFICADOS
+- [ ] Mejorar interfaz para que no sea posible cambiar el número de licencia desde la GUI.
+    - Implementado parcialmente: campo `Número de licencia` se deshabilita si existe `certs/license.txt`.
+    - Revisión requerida: validar que no existan caminos alternativos para cambiar la licencia (manual filesystem edit está fuera del alcance).
+
+UI / UX (Baja prioridad)
+- [ ] Añadir imágenes / iconos en menús: Gest. Cert., Buscar claves, Encriptado múltiple.
+- [ ] Mejorar estilo y botones (colores, espaciados) para aspecto final.
+
+PRUEBAS Y SIGUIENTES PASOS
+- [ ] Pruebas end-to-end: crear CA → crear 2 usuarios → generar archivo → cifrar para ambos → desencriptar con cada uno.
+- [ ] Casos borde: contraseña incorrecta (mostrar error claro), usuario no en lista (denegar), certificado inválido.
+- [ ] Rendimiento con archivos grandes (test con >100MB).
+
+Notas de diseño:
+- El número de licencia se considera única raíz de confianza para la app (se guarda en `certs/license.txt`).
+- Las claves privadas de la CA están cifradas por la licencia (AES-256) y la privada de cada usuario está cifrada por su contraseña (PBKDF2 + AES-256).
+
+Si quieres, procedo a:
+ - Ejecutar pruebas básicas E2E en el entorno actual (crear CA/usuarios y cifrar/descifrar un archivo pequeño).
+ - O bien: pulir la UI para ocultar/mostrar estados (por ejemplo deshabilitar botón "Crear CA" cuando la CA existe).

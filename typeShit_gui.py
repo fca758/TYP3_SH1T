@@ -521,6 +521,14 @@ class App(tk.Tk):
             lic_var = tk.StringVar()
             lic_entry = tk.Entry(ca_frame, textvariable=lic_var, width=50)
             lic_entry.pack(fill=tk.X, pady=(0, 10))
+            # If a license already exists in storage, show it and prevent editing
+            try:
+                existing_lic = certificacion.get_license()
+                lic_var.set(existing_lic)
+                lic_entry.config(state='disabled')
+                tk.Label(ca_frame, text="(Licencia ya configurada — no puede cambiarse)", bg="#f0f0f0", fg="#7f8c8d").pack(anchor=tk.W)
+            except Exception:
+                existing_lic = None
             
             def _create_ca():
                 lic = lic_var.get().strip()
@@ -528,13 +536,32 @@ class App(tk.Tk):
                     messagebox.showwarning("Licencia", "Introduce el número de licencia para crear la CA")
                     return
                 try:
+                    # Prevent creating CA with different license if already set
+                    if existing_lic and existing_lic != lic:
+                        messagebox.showerror("Licencia", "No se puede cambiar el número de licencia existente.")
+                        return
                     certificacion.create_ca(lic)
                     messagebox.showinfo("✓ CA creada", "CA creada y almacenada con éxito")
-                    lic_entry.delete(0, tk.END)
+                    # Disable editing of license and disable the create button
+                    try:
+                        lic_entry.delete(0, tk.END)
+                        lic_entry.insert(0, lic)
+                        lic_entry.config(state='disabled')
+                        create_ca_btn.config(state='disabled')
+                        tk.Label(ca_frame, text="(Licencia configurada)", bg="#f0f0f0", fg="#7f8c8d").pack(anchor=tk.W)
+                    except Exception:
+                        pass
                 except Exception as e:
                     messagebox.showerror("✕ Error CA", f"Error creando CA: {e}")
 
-            tk.Button(ca_frame, text="Crear CA", command=_create_ca, bg="#3498db", fg="white").pack(anchor=tk.W)
+            create_ca_btn = tk.Button(ca_frame, text="Crear CA", command=_create_ca, bg="#3498db", fg="white")
+            create_ca_btn.pack(anchor=tk.W)
+            # If CA already exists, disable creating it again
+            try:
+                if certificacion.has_ca():
+                    create_ca_btn.config(state='disabled')
+            except Exception:
+                pass
 
             # Sección: Crear Usuarios
             tk.Label(frame, text="👤 CREAR USUARIO", font=("Arial", 11, "bold")).pack(anchor=tk.W, pady=(15, 10))
@@ -552,24 +579,19 @@ class App(tk.Tk):
             pw_entry = tk.Entry(user_frame, textvariable=pw_var, show='*', width=40)
             pw_entry.pack(fill=tk.X, pady=(0, 10))
 
-            tk.Label(user_frame, text="Número de licencia (para firmar):", bg="#f9f9f9").pack(anchor=tk.W)
-            lic_user_var = tk.StringVar()
-            lic_user_entry = tk.Entry(user_frame, textvariable=lic_user_var, width=40)
-            lic_user_entry.pack(fill=tk.X, pady=(0, 10))
-
             def _create_user():
                 ident = id_var.get().strip()
                 pw = pw_var.get()
-                lic = lic_user_var.get().strip()
-                if not (ident and pw and lic):
-                    messagebox.showwarning("Faltan datos", "Introduce identidad, contraseña y licencia")
+                if not (ident and pw):
+                    messagebox.showwarning("Faltan datos", "Introduce identidad y contraseña")
                     return
+                # Use stored license implicitly; create_user will raise if CA/license missing
                 try:
-                    certificacion.create_user(ident, pw, lic)
+                    certificacion.create_user(ident, pw)
                     messagebox.showinfo("✓ Usuario creado", f"Usuario '{ident}' creado con éxito")
                     id_entry.delete(0, tk.END)
                     pw_entry.delete(0, tk.END)
-                    lic_user_entry.delete(0, tk.END)
+                    # refresh lists
                     _refresh_list()
                     self.refresh_user_list()  # Actualizar combobox de la ventana principal
                 except Exception as e:
