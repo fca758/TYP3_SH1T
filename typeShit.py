@@ -182,7 +182,6 @@ def store_key(key: bytes, iv: bytes, algorithm: str, mode: str):
 
 def get_stored_keys():
     """Recupera las claves almacenadas en el archivo encriptado keys.txt."""
-    _ensure_rsa_keys()
     
     # Desencriptar archivo
     _decrypt_keys_file()
@@ -238,6 +237,8 @@ def _normalize_key(key: Union[None, str, bytes], algorithm: str) -> bytes:
 
 
 def encriptacionArchivo(input_file: str, output_file: Optional[str], mode: str, key, algorithm: str = None) -> Optional[bytes]:
+
+    _ensure_rsa_keys()
     # Basic logging
     print("[ENCRYPT] handler called")
     print(f"  input_file = {input_file}")
@@ -276,6 +277,8 @@ def encriptacionArchivo(input_file: str, output_file: Optional[str], mode: str, 
 
 
 def desencriptarArchivo(input_file: str, output_file: Optional[str], mode: str, key: str, iv: Optional[Union[str, bytes]] = None, algorithm: str = None) -> None:
+
+    _ensure_rsa_keys()
     # Basic logging
     print("[DECRYPT] handler called")
     print(f"  input_file = {input_file}")
