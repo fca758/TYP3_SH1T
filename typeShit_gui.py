@@ -506,36 +506,17 @@ class App(tk.Tk):
             dialog.title("Gestionar certificados")
             dialog.transient(self)
             dialog.grab_set()
-            dialog.geometry("700x550")
+            dialog.geometry("550x450")
+            dialog.resizable(False, False)
+
 
             frame = tk.Frame(dialog, padx=15, pady=15)
             frame.pack(fill=tk.BOTH, expand=True)
 
-            # Sección: Crear/Configurar CA
-            tk.Label(frame, text="⚙ AUTORIDAD CERTIFICADORA (CA)", font=("Arial", 11, "bold")).pack(anchor=tk.W, pady=(0, 10))
             
             ca_frame = tk.Frame(frame, bg="#f0f0f0", padx=10, pady=10)
             ca_frame.pack(fill=tk.X, pady=(0, 15))
 
-            # Mostrar estado: licencia y CA
-            try:
-                existing_lic = certificacion.get_license()
-                tk.Label(ca_frame, text=f"Número de licencia: {existing_lic}", bg="#f0f0f0").pack(anchor=tk.W)
-                tk.Label(ca_frame, text="(Licencia configurada — no editable desde la GUI)", bg="#f0f0f0", fg="#7f8c8d").pack(anchor=tk.W)
-            except Exception:
-                existing_lic = None
-                tk.Label(ca_frame, text="Número de licencia: (no configurada)", bg="#f0f0f0", fg="#c0392b").pack(anchor=tk.W)
-            
-            # Nota: Ya no se permite crear una nueva licencia/CA desde la GUI.
-            # La CA debe haber sido creada externamente o desde la línea de comandos.
-            # Mostramos en la GUI si la CA ya existe o no.
-            try:
-                if certificacion.has_ca():
-                    tk.Label(ca_frame, text="CA encontrada y configurada ", bg="#f0f0f0", fg="#27ae60").pack(anchor=tk.W)
-                else:
-                    tk.Label(ca_frame, text="CA no encontrada (crear CA desde la línea de comandos)", bg="#f0f0f0", fg="#c0392b").pack(anchor=tk.W)
-            except Exception:
-                pass
 
             # Sección: Crear Usuarios
             tk.Label(frame, text="👤 CREAR USUARIO", font=("Arial", 11, "bold")).pack(anchor=tk.W, pady=(15, 10))
