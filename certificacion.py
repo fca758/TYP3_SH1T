@@ -11,13 +11,16 @@ from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
 
+# Asegúrate de que el módulo aes.py esté en la misma carpeta
 from aes import AES
 
 AES_MODULE = AES()
 
+# --- CONFIGURACIÓN DE RUTAS ---
 ROOT = Path("certs")
 USERS_DIR = ROOT / "users"
 CA_DIR = ROOT / "ca"
+# Aquí definimos obligatoriamente el archivo de licencia en texto plano
 LICENSE_FILE = ROOT / "license.txt"
 
 SEPARATOR = b"\n---CERTMETA-END---\n"
@@ -31,15 +34,22 @@ def _safe_filename(name: str) -> str:
     return "".join(c for c in name if c.isalnum() or c in (' ', '.', '_', '-')).rstrip()
 
 def _derive_key_from_license(license_number: str) -> bytes:
-    # Simple derivation as requested: SHA-256 hash of license
+    """
+    Deriva una clave criptográfica (hash) usando el texto plano de la licencia.
+    """
     return hashlib.sha256(license_number.encode("utf-8")).digest()
 
 
 def get_license() -> str:
-    """Return the stored license number or raise FileNotFoundError if none."""
+    """
+    Lee OBLIGATORIAMENTE el archivo de texto plano para obtener la licencia.
+    Si el archivo no existe, lanza un error, ya que es requerido para desencriptar.
+    """
     _ensure_dirs()
     if not LICENSE_FILE.exists():
-        raise FileNotFoundError("License file not found")
+        raise FileNotFoundError(f"Falta el archivo de licencia en: {LICENSE_FILE}. Crea el archivo txt con la licencia dentro.")
+    
+    # Leemos el contenido y quitamos espacios en blanco extra
     return LICENSE_FILE.read_text(encoding="utf-8").strip()
 
 
@@ -55,8 +65,11 @@ def _derive_key_from_password(password: str, salt: bytes) -> bytes:
     return kdf.derive(password.encode("utf-8"))
 
 
-def create_ca(license_number: str, key_size: int = 2048) -> None:
-    """Genera clave RSA de la autoridad (CA) y guarda la pública y la privada cifrada por licencia."""
+def create_ca(license_number_input: str = None, key_size: int = 2048) -> None:
+    """
+    Genera clave RSA de la autoridad (CA).
+    Guarda la licencia en texto plano en 'certs/license.txt' y la usa para cifrar la privada.
+    """
     _ensure_dirs()
     priv_path = CA_DIR / "ca_private.enc"
     pub_path = CA_DIR / "ca_public.pem"
@@ -65,11 +78,19 @@ def create_ca(license_number: str, key_size: int = 2048) -> None:
     if has_ca():
         raise FileExistsError("Ya existe una CA configurada en esta instalación.")
 
-    # If license file exists, it must match the provided license
+    # Lógica de persistencia de licencia:
+    # Si el archivo ya existe, usamos ese. Si no, usamos el input y creamos el archivo.
     if LICENSE_FILE.exists():
-        existing = LICENSE_FILE.read_text(encoding="utf-8").strip()
-        if existing != license_number:
-            raise ValueError("Existe otro número de licencia en la instalación. No se permite cambiarlo.")
+        stored_license = LICENSE_FILE.read_text(encoding="utf-8").strip()
+        if license_number_input and license_number_input != stored_license:
+            print("AVISO: Se ignoró la licencia proporcionada por argumento porque ya existe un archivo license.txt.")
+        final_license = stored_license
+    else:
+        if not license_number_input:
+            raise ValueError("No existe license.txt y no se proporcionó ninguna licencia para crear la CA.")
+        # Guardamos la licencia en texto plano como se solicitó
+        LICENSE_FILE.write_text(license_number_input, encoding="utf-8")
+        final_license = license_number_input
 
     # Generate RSA key
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=key_size)
@@ -85,8 +106,8 @@ def create_ca(license_number: str, key_size: int = 2048) -> None:
         tf.write(private_key.private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption()))
         tf_path = Path(tf.name)
 
-    # Encrypt private using AES-256 with key derived from license (no salt per spec)
-    key = _derive_key_from_license(license_number)
+    # Encrypt private using AES-256 with key derived directly from the license file content
+    key = _derive_key_from_license(final_license)
     iv = AES_MODULE.encriptar_archivo_AES(file_path=str(tf_path), modeAES="CBC", key=key, key_length_bits=256, output_path=str(tf_path) + ".enc")
 
     # Read ciphertext and write final file as iv||ciphertext
@@ -104,13 +125,6 @@ def create_ca(license_number: str, key_size: int = 2048) -> None:
     except Exception:
         pass
 
-    # Store the license permanently (only if not present already)
-    try:
-        if not LICENSE_FILE.exists():
-            LICENSE_FILE.write_text(license_number, encoding="utf-8")
-    except Exception:
-        pass
-
 
 def _load_ca_public() -> serialization.PublicFormat:
     pub_path = CA_DIR / "ca_public.pem"
@@ -119,7 +133,11 @@ def _load_ca_public() -> serialization.PublicFormat:
     return serialization.load_pem_public_key(pub_path.read_bytes(), backend=default_backend())
 
 
-def _load_ca_private(license_number: str = None):
+def _load_ca_private():
+    """
+    Carga la clave privada de la CA.
+    YA NO ACEPTA ARGUMENTOS: Obligatoriamente lee license.txt del disco.
+    """
     priv_path = CA_DIR / "ca_private.enc"
     if not priv_path.exists():
         raise FileNotFoundError("CA private key not found. Create CA first.")
@@ -133,10 +151,12 @@ def _load_ca_private(license_number: str = None):
         tf.write(ciphertext)
         tmp_enc = Path(tf.name)
 
-    # license_number may be omitted; read from stored license
-    if license_number is None:
-        license_number = get_license()
+    # OBTENCIÓN DE LA LICENCIA:
+    # Se obtiene exclusivamente del archivo plano.
+    license_number = get_license()
+    
     key = _derive_key_from_license(license_number)
+    
     # Decrypt to temp plaintext
     tmp_out = Path(str(tmp_enc) + ".dec")
     AES_MODULE.desencriptar_archivo_AES(file_path=str(tmp_enc), modeAES="CBC", key=key, iv=iv, key_length_bits=256, output_path=str(tmp_out))
@@ -153,8 +173,11 @@ def _load_ca_private(license_number: str = None):
     return priv
 
 
-def create_user(identity: str, password: str, license_number: str = None, key_size: int = 2048) -> None:
-    """Genera par RSA para usuario, crea certificado firmado por CA y guarda clave privada cifrada por contraseña."""
+def create_user(identity: str, password: str, key_size: int = 2048) -> None:
+    """
+    Genera par RSA para usuario, crea certificado firmado por CA.
+    NOTA: Ya no requiere pasar la licencia por parámetro, la lee del archivo txt.
+    """
     _ensure_dirs()
     fn = _safe_filename(identity)
     user_cert_path = USERS_DIR / f"{fn}.cert"
@@ -167,14 +190,12 @@ def create_user(identity: str, password: str, license_number: str = None, key_si
     pub_pem = public_key.public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
     ident_bytes = identity.encode("utf-8")
 
-    # Sign with CA private (use stored license if none provided)
-    if license_number is None:
-        try:
-            license_number = get_license()
-        except FileNotFoundError:
-            raise FileNotFoundError("No existe licencia/CA. Crea la CA primero desde la gestión de certificados.")
+    # Sign with CA private (load using stored license file)
+    try:
+        ca_priv = _load_ca_private()
+    except FileNotFoundError:
+         raise FileNotFoundError("No se pudo cargar la CA. Asegúrate de que existe 'certs/license.txt' y la CA ha sido creada.")
 
-    ca_priv = _load_ca_private(license_number)
     signature = ca_priv.sign(pub_pem + ident_bytes, padding.PKCS1v15(), hashes.SHA256())
 
     cert = {
@@ -292,7 +313,9 @@ def encrypt_for_recipients(input_file: str, recipients: list, algorithm: str, mo
 
     # Encrypt sym_key for each recipient
     rec_list = []
-    ca_pub = _load_ca_public()  # ensure CA exists
+    # ensure CA exists (this just loads public key, doesn't need private/license)
+    _load_ca_public() 
+    
     for identity in recipients:
         cert = get_certificate(identity)
         pub_pem = cert.get("public_key_pem").encode("utf-8")
