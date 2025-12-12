@@ -1,5 +1,6 @@
 TAREAS A REALIZAR - ENTREGA 4 (ACTUALIZADO)
 
+
 Estado actual: he integrado un sistema de certificados y la GUI; quedan ajustes funcionales y pruebas.
 
 PRIORIDAD ALTA
