@@ -33,27 +33,34 @@ def _ensure_dirs():
 def _safe_filename(name: str) -> str:
     return "".join(c for c in name if c.isalnum() or c in (' ', '.', '_', '-')).rstrip()
 
-def _derive_key_from_license(license_number: str) -> bytes:
+def get_license_key() -> bytes:
     """
-    Deriva una clave criptográfica (hash) usando el texto plano de la licencia.
-    """
-    # Normalize license to avoid accidental whitespace differences
-    if license_number is None:
-        license_number = ""
-    return hashlib.sha256(license_number.strip().encode("utf-8")).digest()
-
-
-def get_license() -> str:
-    """
-    Lee OBLIGATORIAMENTE el archivo de texto plano para obtener la licencia.
-    Si el archivo no existe, lanza un error, ya que es requerido para desencriptar.
+    Lee la clave AES de 32 bytes (256 bits) desde license.txt en formato hexadecimal.
+    Si el archivo no existe, lanza un error.
     """
     _ensure_dirs()
     if not LICENSE_FILE.exists():
-        raise FileNotFoundError(f"Falta el archivo de licencia en: {LICENSE_FILE}. Crea el archivo txt con la licencia dentro.")
+        raise FileNotFoundError(f"Falta el archivo de licencia en: {LICENSE_FILE}. Crea el archivo txt con la clave AES en formato hexadecimal (64 caracteres).")
     
-    # Leemos el contenido y quitamos espacios en blanco extra
-    return LICENSE_FILE.read_text(encoding="utf-8").strip()
+    # Leer el contenido en formato hexadecimal y convertir a bytes
+    hex_key = LICENSE_FILE.read_text(encoding="utf-8").strip()
+    try:
+        key = bytes.fromhex(hex_key)
+        if len(key) != 32:
+            raise ValueError(f"La clave debe ser de 32 bytes (256 bits = 64 caracteres hex). Encontrados: {len(key)} bytes")
+        return key
+    except ValueError as e:
+        raise ValueError(f"Error leyendo la clave AES desde {LICENSE_FILE}: {e}. Debe contener 64 caracteres hexadecimales.")
+    
+    # Leer el contenido en formato hexadecimal y convertir a bytes
+    hex_key = LICENSE_FILE.read_text(encoding="utf-8").strip()
+    try:
+        key = bytes.fromhex(hex_key)
+        if len(key) != 32:
+            raise ValueError(f"La clave debe ser de 32 bytes (256 bits). Encontrados: {len(key)} bytes")
+        return key
+    except ValueError as e:
+        raise ValueError(f"Error leyendo la clave desde {LICENSE_FILE}: {e}")
 
 
 def has_ca() -> bool:
@@ -68,33 +75,51 @@ def _derive_key_from_password(password: str, salt: bytes) -> bytes:
     return kdf.derive(password.encode("utf-8"))
 
 
-def create_ca(license_number_input: str = None, key_size: int = 2048) -> None:
+def create_ca(aes_key_hex: str = None, key_size: int = 2048) -> None:
     """
     Genera clave RSA de la autoridad (CA).
-    Guarda la licencia en texto plano en 'certs/license.txt' y la usa para cifrar la privada.
+    Guarda la clave AES en 'certs/license.txt' en formato hexadecimal y la usa para cifrar la clave privada de la CA.
+    
+    Parámetros:
+        aes_key_hex (str, opcional): Clave AES de 32 bytes en formato hexadecimal (64 caracteres).
+                                      Si no se proporciona, se genera una aleatoria.
+        key_size (int): Tamaño de la clave RSA en bits (default: 2048)
     """
     _ensure_dirs()
     priv_path = CA_DIR / "ca_private.enc"
     pub_path = CA_DIR / "ca_public.pem"
 
-    # Do not overwrite existing CA
+    # Si ya existe CA, eliminarla primero para recrearla
     if has_ca():
-        raise FileExistsError("Ya existe una CA configurada en esta instalación.")
+        print("⚠ Ya existe una CA. Eliminándola para crear una nueva...")
+        try:
+            priv_path.unlink()
+            pub_path.unlink()
+        except Exception as e:
+            print(f"⚠ Error eliminando CA anterior: {e}")
 
-    # Lógica de persistencia de licencia:
-    # Si el archivo ya existe, usamos ese. Si no, usamos el input y creamos el archivo.
+    # Lógica de la clave AES:
+    # Si el archivo ya existe, usamos esa clave. Si no, generamos/usamos la proporcionada.
     if LICENSE_FILE.exists():
-        stored_license = LICENSE_FILE.read_text(encoding="utf-8").strip()
-        if license_number_input and license_number_input != stored_license:
-            print("AVISO: Se ignoró la licencia proporcionada por argumento porque ya existe un archivo license.txt.")
-        final_license = stored_license
+        print("INFO: Usando clave AES existente de license.txt")
+        aes_key = get_license_key()
     else:
-        if not license_number_input:
-            raise ValueError("No existe license.txt y no se proporcionó ninguna licencia para crear la CA.")
-        # Guardamos la licencia en texto plano normalizada (sin espacios finales/incipientes)
-        normalized = license_number_input.strip()
-        LICENSE_FILE.write_text(normalized, encoding="utf-8")
-        final_license = normalized
+        if aes_key_hex:
+            # Validar la clave proporcionada
+            try:
+                aes_key = bytes.fromhex(aes_key_hex)
+                if len(aes_key) != 32:
+                    raise ValueError(f"La clave AES debe ser de 32 bytes (64 caracteres hex). Proporcionados: {len(aes_key)} bytes")
+            except ValueError as e:
+                raise ValueError(f"Error en la clave AES proporcionada: {e}")
+        else:
+            # Generar clave aleatoria de 32 bytes (256 bits)
+            aes_key = secrets.token_bytes(32)
+            print("INFO: Se generó una nueva clave AES aleatoria.")
+        
+        # Guardar la clave en formato hexadecimal
+        LICENSE_FILE.write_text(aes_key.hex(), encoding="utf-8")
+        print(f"Clave AES guardada en: {LICENSE_FILE}")
 
     # Generate RSA key
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=key_size)
@@ -102,95 +127,125 @@ def create_ca(license_number_input: str = None, key_size: int = 2048) -> None:
 
     # Serialize public
     pub_pem = public_key.public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
-    with open(pub_path, "wb") as f:
-        f.write(pub_pem)
+    pub_path.write_bytes(pub_pem)
 
     # Serialize private to temp file
-    with tempfile.NamedTemporaryFile(delete=False) as tf:
-        tf.write(private_key.private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption()))
-        tf_path = Path(tf.name)
-
-    # Encrypt private using AES-256 with key derived directly from the license file content
-    key = _derive_key_from_license(final_license)
-    iv = AES_MODULE.encriptar_archivo_AES(file_path=str(tf_path), modeAES="CBC", key=key, key_length_bits=256, output_path=str(tf_path) + ".enc")
-
-    # Read ciphertext and write final file as iv||ciphertext
-    ciphertext = Path(str(tf_path) + ".enc").read_bytes()
-    with open(priv_path, "wb") as f:
-        f.write(iv + ciphertext)
-
-    # Cleanup temps
+    tf_path = Path(tempfile.gettempdir()) / f"ca_priv_{secrets.token_hex(8)}.pem"
+    
     try:
-        tf_path.unlink()
-    except Exception:
-        pass
-    try:
-        Path(str(tf_path) + ".enc").unlink()
-    except Exception:
-        pass
+        tf_path.write_bytes(
+            private_key.private_bytes(
+                encoding=serialization.Encoding.PEM, 
+                format=serialization.PrivateFormat.PKCS8, 
+                encryption_algorithm=serialization.NoEncryption()
+            )
+        )
+
+        # Encrypt private using AES-256 with the key from license.txt
+        iv = AES_MODULE.encriptar_archivo_AES(
+            file_path=str(tf_path), 
+            modeAES="CBC", 
+            key=aes_key, 
+            key_length_bits=256, 
+            output_path=str(tf_path) + ".enc"
+        )
+
+        # Read ciphertext and write final file as iv||ciphertext
+        ciphertext = Path(str(tf_path) + ".enc").read_bytes()
+        priv_path.write_bytes(iv + ciphertext)
+        
+        print(f"CA creada correctamente.")
+        
+    finally:
+        # Cleanup temps
+        try:
+            if tf_path.exists():
+                tf_path.unlink()
+        except Exception:
+            pass
+        try:
+            enc_path = Path(str(tf_path) + ".enc")
+            if enc_path.exists():
+                enc_path.unlink()
+        except Exception:
+            pass
+
+
+def _ensure_ca_exists():
+    """
+    Verifica que exista la CA. Si no existe, la crea automáticamente.
+    """
+    if not has_ca():
+        print("⚠ No se encontró la CA. Creando una nueva automáticamente...")
+        try:
+            create_ca()
+            print("✓ CA creada automáticamente.")
+        except Exception as e:
+            raise RuntimeError(f"No se pudo crear la CA automáticamente: {e}")
 
 
 def _load_ca_public() -> serialization.PublicFormat:
+    """Carga la clave pública de la CA. Si no existe, crea la CA automáticamente."""
+    _ensure_ca_exists()
     pub_path = CA_DIR / "ca_public.pem"
-    if not pub_path.exists():
-        raise FileNotFoundError("CA public key not found. Create CA first.")
     return serialization.load_pem_public_key(pub_path.read_bytes(), backend=default_backend())
 
 
 def _load_ca_private():
     """
-    Carga la clave privada de la CA.
-    YA NO ACEPTA ARGUMENTOS: Obligatoriamente lee license.txt del disco.
+    Carga la clave privada de la CA. Si no existe, crea la CA automáticamente.
+    Usa la clave AES almacenada en license.txt para descifrar ca_private.enc.
     """
+    _ensure_ca_exists()
     priv_path = CA_DIR / "ca_private.enc"
-    if not priv_path.exists():
-        raise FileNotFoundError("CA private key not found. Create CA first.")
 
     data = priv_path.read_bytes()
     iv = data[:16]
     ciphertext = data[16:]
 
     # write ciphertext to temp .enc file for AES module
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".enc") as tf:
-        tf.write(ciphertext)
-        tmp_enc = Path(tf.name)
+    tmp_enc = Path(tempfile.gettempdir()) / f"ca_priv_dec_{secrets.token_hex(8)}.enc"
+    tmp_out = Path(tempfile.gettempdir()) / f"ca_priv_dec_{secrets.token_hex(8)}.dec"
 
-    # OBTENCIÓN DE LA LICENCIA:
-    # Se obtiene exclusivamente del archivo plano.
-    license_number = get_license()
-    
-    key = _derive_key_from_license(license_number)
-    
-    # Decrypt to temp plaintext - try with normalized license first
-    tmp_out = Path(str(tmp_enc) + ".dec")
     try:
-        AES_MODULE.desencriptar_archivo_AES(file_path=str(tmp_enc), modeAES="CBC", key=key, iv=iv, key_length_bits=256, output_path=str(tmp_out))
-    except Exception:
-        # If decryption failed, try fallback using the raw license contents (historic bug: write without strip)
+        tmp_enc.write_bytes(ciphertext)
+
+        # Obtener la clave AES directamente desde license.txt (sin derivar)
+        aes_key = get_license_key()
+        
+        # Decrypt to temp plaintext
+        AES_MODULE.desencriptar_archivo_AES(
+            file_path=str(tmp_enc), 
+            modeAES="CBC", 
+            key=aes_key, 
+            iv=iv, 
+            key_length_bits=256, 
+            output_path=str(tmp_out)
+        )
+
+        priv = serialization.load_pem_private_key(tmp_out.read_bytes(), password=None, backend=default_backend())
+        
+        return priv
+        
+    finally:
+        # Cleanup
         try:
-            raw_license = LICENSE_FILE.read_text(encoding="utf-8")
-            fallback_key = _derive_key_from_license(raw_license)
-            AES_MODULE.desencriptar_archivo_AES(file_path=str(tmp_enc), modeAES="CBC", key=fallback_key, iv=iv, key_length_bits=256, output_path=str(tmp_out))
+            if tmp_enc.exists():
+                tmp_enc.unlink()
         except Exception:
-            # Re-raise the original exception for consumers to handle
-            raise
-
-    priv = serialization.load_pem_private_key(tmp_out.read_bytes(), password=None, backend=default_backend())
-
-    # Cleanup
-    try:
-        tmp_enc.unlink()
-        tmp_out.unlink()
-    except Exception:
-        pass
-
-    return priv
+            pass
+        try:
+            if tmp_out.exists():
+                tmp_out.unlink()
+        except Exception:
+            pass
 
 
 def create_user(identity: str, password: str, key_size: int = 2048) -> None:
     """
     Genera par RSA para usuario, crea certificado firmado por CA.
-    NOTA: Ya no requiere pasar la licencia por parámetro, la lee del archivo txt.
+    La clave privada del usuario se cifra con una clave derivada de su password.
+    Si no existe la CA, se crea automáticamente.
     """
     _ensure_dirs()
     fn = _safe_filename(identity)
@@ -204,11 +259,8 @@ def create_user(identity: str, password: str, key_size: int = 2048) -> None:
     pub_pem = public_key.public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
     ident_bytes = identity.encode("utf-8")
 
-    # Sign with CA private (load using stored license file)
-    try:
-        ca_priv = _load_ca_private()
-    except FileNotFoundError:
-         raise FileNotFoundError("No se pudo cargar la CA. Asegúrate de que existe 'certs/license.txt' y la CA ha sido creada.")
+    # Sign with CA private (se crea automáticamente si no existe)
+    ca_priv = _load_ca_private()
 
     signature = ca_priv.sign(pub_pem + ident_bytes, padding.PKCS1v15(), hashes.SHA256())
 
@@ -225,28 +277,47 @@ def create_user(identity: str, password: str, key_size: int = 2048) -> None:
     salt = secrets.token_bytes(16)
     key = _derive_key_from_password(password, salt)
 
-    # write private to temp file
-    with tempfile.NamedTemporaryFile(delete=False, mode='wb') as tf:
-        tf.write(private_key.private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption()))
-        tf_path = Path(tf.name)
-
-    # Asegurarse de que el archivo se cierra antes de encriptarlo
+    # Crear archivo temporal con un nombre único
+    tf_path = Path(tempfile.gettempdir()) / f"userkey_{secrets.token_hex(8)}.pem"
+    
     try:
-        iv = AES_MODULE.encriptar_archivo_AES(file_path=str(tf_path), modeAES="CBC", key=key, key_length_bits=256, output_path=str(tf_path) + ".enc")
+        # Escribir la clave privada en el archivo temporal
+        tf_path.write_bytes(
+            private_key.private_bytes(
+                encoding=serialization.Encoding.PEM, 
+                format=serialization.PrivateFormat.PKCS8, 
+                encryption_algorithm=serialization.NoEncryption()
+            )
+        )
 
+        # Encriptar el archivo temporal - esto devuelve el IV
+        iv = AES_MODULE.encriptar_archivo_AES(
+            file_path=str(tf_path), 
+            modeAES="CBC", 
+            key=key, 
+            key_length_bits=256, 
+            output_path=str(tf_path) + ".enc"
+        )
+
+        # Leer el ciphertext del archivo encriptado (sin IV en cabecera)
         ciphertext = Path(str(tf_path) + ".enc").read_bytes()
 
         # Final file structure: salt(16) || iv(16) || ciphertext
-        with open(user_key_path, "wb") as f:
-            f.write(salt + iv + ciphertext)
+        user_key_path.write_bytes(salt + iv + ciphertext)
+            
+        print(f"Usuario '{identity}' creado correctamente.")
+        
     finally:
-        # cleanup temps
+        # Limpiar archivos temporales
         try:
-            tf_path.unlink()
+            if tf_path.exists():
+                tf_path.unlink()
         except Exception:
             pass
         try:
-            Path(str(tf_path) + ".enc").unlink()
+            enc_path = Path(str(tf_path) + ".enc")
+            if enc_path.exists():
+                enc_path.unlink()
         except Exception:
             pass
 
@@ -293,14 +364,15 @@ def _decrypt_user_private_key(identity: str, password: str):
     iv = data[16:32]
     ciphertext = data[32:]
 
-    # Crear archivo temporal con extensión .enc y escribir solo el ciphertext
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".enc") as tf:
-        tf.write(ciphertext)
-        tmp_enc = Path(tf.name)
+    # Crear archivo temporal con nombre único y extensión .enc
+    tmp_enc = Path(tempfile.gettempdir()) / f"userkey_dec_{secrets.token_hex(8)}.enc"
+    tmp_out = Path(tempfile.gettempdir()) / f"userkey_dec_{secrets.token_hex(8)}.dec"
 
     try:
+        # Escribir el ciphertext en el archivo temporal
+        tmp_enc.write_bytes(ciphertext)
+        
         key = _derive_key_from_password(password, salt)
-        tmp_out = Path(str(tmp_enc) + ".dec")
         
         # Desencriptar usando el IV extraído
         AES_MODULE.desencriptar_archivo_AES(
@@ -315,28 +387,26 @@ def _decrypt_user_private_key(identity: str, password: str):
         # Cargar la clave privada desde el archivo descifrado
         priv = serialization.load_pem_private_key(tmp_out.read_bytes(), password=None, backend=default_backend())
 
-        # Limpiar archivos temporales
-        try:
-            tmp_enc.unlink()
-            tmp_out.unlink()
-        except Exception:
-            pass
-
         return priv
+        
     except ValueError as e:
         # Si hay error de padding, podría ser contraseña incorrecta
-        try:
-            tmp_enc.unlink()
-        except Exception:
-            pass
         raise ValueError(f"No se pudo desencriptar: {e}. Verifica la contraseña.")
     except Exception as e:
-        # Limpiar en caso de error
+        # Propagar el error original
+        raise
+    finally:
+        # Limpiar archivos temporales siempre
         try:
-            tmp_enc.unlink()
+            if tmp_enc.exists():
+                tmp_enc.unlink()
         except Exception:
             pass
-        raise
+        try:
+            if tmp_out.exists():
+                tmp_out.unlink()
+        except Exception:
+            pass
 
 
 def encrypt_for_recipients(input_file: str, recipients: list, algorithm: str, mode: str, output_file: str = None) -> str:
@@ -351,9 +421,16 @@ def encrypt_for_recipients(input_file: str, recipients: list, algorithm: str, mo
 
     # Use AES module to create ciphertext temporary file
     tmp_cipher_path = Path(tempfile.gettempdir()) / f"hybenc_{secrets.token_hex(8)}.enc"
+    tmp_plain = Path(input_file)
 
     try:
-        iv = AES_MODULE.encriptar_archivo_AES(file_path=input_file, modeAES=mode, key=sym_key, key_length_bits=key_bits, output_path=str(tmp_cipher_path))
+        iv = AES_MODULE.encriptar_archivo_AES(
+            file_path=input_file, 
+            modeAES=mode, 
+            key=sym_key, 
+            key_length_bits=key_bits, 
+            output_path=str(tmp_cipher_path)
+        )
 
         ciphertext = tmp_cipher_path.read_bytes()
 
@@ -382,7 +459,8 @@ def encrypt_for_recipients(input_file: str, recipients: list, algorithm: str, mo
     finally:
         # cleanup temp
         try:
-            tmp_cipher_path.unlink()
+            if tmp_cipher_path.exists():
+                tmp_cipher_path.unlink()
         except Exception:
             pass
 
@@ -438,10 +516,12 @@ def decrypt_hybrid_file(hybrid_file: str, identity: str, password: str, output_f
         return output_file
     finally:
         try:
-            tmp_enc.unlink()
+            if tmp_enc.exists():
+                tmp_enc.unlink()
         except Exception:
             pass
         try:
-            tmp_out.unlink()
+            if tmp_out.exists():
+                tmp_out.unlink()
         except Exception:
             pass
