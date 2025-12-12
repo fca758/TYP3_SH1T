@@ -226,24 +226,29 @@ def create_user(identity: str, password: str, key_size: int = 2048) -> None:
     key = _derive_key_from_password(password, salt)
 
     # write private to temp file
-    with tempfile.NamedTemporaryFile(delete=False) as tf:
+    with tempfile.NamedTemporaryFile(delete=False, mode='wb') as tf:
         tf.write(private_key.private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption()))
         tf_path = Path(tf.name)
 
-    iv = AES_MODULE.encriptar_archivo_AES(file_path=str(tf_path), modeAES="CBC", key=key, key_length_bits=256, output_path=str(tf_path) + ".enc")
-
-    ciphertext = Path(str(tf_path) + ".enc").read_bytes()
-
-    # Final file structure: salt(16) || iv(16) || ciphertext
-    with open(user_key_path, "wb") as f:
-        f.write(salt + iv + ciphertext)
-
-    # cleanup temps
+    # Asegurarse de que el archivo se cierra antes de encriptarlo
     try:
-        tf_path.unlink()
-        Path(str(tf_path) + ".enc").unlink()
-    except Exception:
-        pass
+        iv = AES_MODULE.encriptar_archivo_AES(file_path=str(tf_path), modeAES="CBC", key=key, key_length_bits=256, output_path=str(tf_path) + ".enc")
+
+        ciphertext = Path(str(tf_path) + ".enc").read_bytes()
+
+        # Final file structure: salt(16) || iv(16) || ciphertext
+        with open(user_key_path, "wb") as f:
+            f.write(salt + iv + ciphertext)
+    finally:
+        # cleanup temps
+        try:
+            tf_path.unlink()
+        except Exception:
+            pass
+        try:
+            Path(str(tf_path) + ".enc").unlink()
+        except Exception:
+            pass
 
 
 def list_certificates():
@@ -288,23 +293,50 @@ def _decrypt_user_private_key(identity: str, password: str):
     iv = data[16:32]
     ciphertext = data[32:]
 
+    # Crear archivo temporal con extensión .enc y escribir solo el ciphertext
     with tempfile.NamedTemporaryFile(delete=False, suffix=".enc") as tf:
         tf.write(ciphertext)
         tmp_enc = Path(tf.name)
 
-    key = _derive_key_from_password(password, salt)
-    tmp_out = Path(str(tmp_enc) + ".dec")
-    AES_MODULE.desencriptar_archivo_AES(file_path=str(tmp_enc), modeAES="CBC", key=key, iv=iv, key_length_bits=256, output_path=str(tmp_out))
-
-    priv = serialization.load_pem_private_key(tmp_out.read_bytes(), password=None, backend=default_backend())
-
     try:
-        tmp_enc.unlink()
-        tmp_out.unlink()
-    except Exception:
-        pass
+        key = _derive_key_from_password(password, salt)
+        tmp_out = Path(str(tmp_enc) + ".dec")
+        
+        # Desencriptar usando el IV extraído
+        AES_MODULE.desencriptar_archivo_AES(
+            file_path=str(tmp_enc), 
+            modeAES="CBC", 
+            key=key, 
+            iv=iv, 
+            key_length_bits=256, 
+            output_path=str(tmp_out)
+        )
 
-    return priv
+        # Cargar la clave privada desde el archivo descifrado
+        priv = serialization.load_pem_private_key(tmp_out.read_bytes(), password=None, backend=default_backend())
+
+        # Limpiar archivos temporales
+        try:
+            tmp_enc.unlink()
+            tmp_out.unlink()
+        except Exception:
+            pass
+
+        return priv
+    except ValueError as e:
+        # Si hay error de padding, podría ser contraseña incorrecta
+        try:
+            tmp_enc.unlink()
+        except Exception:
+            pass
+        raise ValueError(f"No se pudo desencriptar: {e}. Verifica la contraseña.")
+    except Exception as e:
+        # Limpiar en caso de error
+        try:
+            tmp_enc.unlink()
+        except Exception:
+            pass
+        raise
 
 
 def encrypt_for_recipients(input_file: str, recipients: list, algorithm: str, mode: str, output_file: str = None) -> str:
@@ -318,41 +350,41 @@ def encrypt_for_recipients(input_file: str, recipients: list, algorithm: str, mo
     sym_key = secrets.token_bytes(key_bytes)
 
     # Use AES module to create ciphertext temporary file
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".enc") as tf:
-        tmp_cipher_path = Path(tf.name)
+    tmp_cipher_path = Path(tempfile.gettempdir()) / f"hybenc_{secrets.token_hex(8)}.enc"
 
-    iv = AES_MODULE.encriptar_archivo_AES(file_path=input_file, modeAES=mode, key=sym_key, key_length_bits=key_bits, output_path=str(tmp_cipher_path))
-
-    ciphertext = tmp_cipher_path.read_bytes()
-
-    # Encrypt sym_key for each recipient
-    rec_list = []
-    # ensure CA exists (this just loads public key, doesn't need private/license)
-    _load_ca_public() 
-    
-    for identity in recipients:
-        cert = get_certificate(identity)
-        pub_pem = cert.get("public_key_pem").encode("utf-8")
-        pub = serialization.load_pem_public_key(pub_pem, backend=default_backend())
-        enc_sym = pub.encrypt(sym_key, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
-        rec_list.append({"identity": identity, "enc_key": base64.b64encode(enc_sym).decode("utf-8")})
-
-    meta = {"algorithm": algorithm, "mode": mode, "iv": iv.hex(), "recipients": rec_list}
-    meta_bytes = json.dumps(meta).encode("utf-8")
-
-    if output_file is None:
-        output_file = str(Path(input_file).with_suffix(Path(input_file).suffix + ".hybenc"))
-
-    with open(output_file, "wb") as f:
-        f.write(meta_bytes + SEPARATOR + ciphertext)
-
-    # cleanup temp
     try:
-        tmp_cipher_path.unlink()
-    except Exception:
-        pass
+        iv = AES_MODULE.encriptar_archivo_AES(file_path=input_file, modeAES=mode, key=sym_key, key_length_bits=key_bits, output_path=str(tmp_cipher_path))
 
-    return output_file
+        ciphertext = tmp_cipher_path.read_bytes()
+
+        # Encrypt sym_key for each recipient
+        rec_list = []
+        # ensure CA exists (this just loads public key, doesn't need private/license)
+        _load_ca_public() 
+        
+        for identity in recipients:
+            cert = get_certificate(identity)
+            pub_pem = cert.get("public_key_pem").encode("utf-8")
+            pub = serialization.load_pem_public_key(pub_pem, backend=default_backend())
+            enc_sym = pub.encrypt(sym_key, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
+            rec_list.append({"identity": identity, "enc_key": base64.b64encode(enc_sym).decode("utf-8")})
+
+        meta = {"algorithm": algorithm, "mode": mode, "iv": iv.hex(), "recipients": rec_list}
+        meta_bytes = json.dumps(meta).encode("utf-8")
+
+        if output_file is None:
+            output_file = str(Path(input_file).with_suffix(Path(input_file).suffix + ".hybenc"))
+
+        with open(output_file, "wb") as f:
+            f.write(meta_bytes + SEPARATOR + ciphertext)
+
+        return output_file
+    finally:
+        # cleanup temp
+        try:
+            tmp_cipher_path.unlink()
+        except Exception:
+            pass
 
 
 def decrypt_hybrid_file(hybrid_file: str, identity: str, password: str, output_file: str = None) -> str:
@@ -365,7 +397,6 @@ def decrypt_hybrid_file(hybrid_file: str, identity: str, password: str, output_f
     algorithm = meta.get("algorithm")
     mode = meta.get("mode")
     iv = bytes.fromhex(meta.get("iv"))
-
     # Find recipient
     rec = None
     for r in meta.get("recipients", []):
@@ -382,23 +413,35 @@ def decrypt_hybrid_file(hybrid_file: str, identity: str, password: str, output_f
     sym_key = user_priv.decrypt(enc_key, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
 
     # Write ciphertext to temp .enc file and use AES module to decrypt
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".enc") as tf:
-        tf.write(ciphertext)
-        tmp_enc = Path(tf.name)
-
-    key_bits = 256 if algorithm == "AES-256" else (192 if algorithm == "AES-192" else 128)
-    tmp_out = Path(str(tmp_enc) + ".dec")
-    AES_MODULE.desencriptar_archivo_AES(file_path=str(tmp_enc), modeAES=mode, key=sym_key, iv=iv, key_length_bits=key_bits, output_path=str(tmp_out))
-
-    if output_file is None:
-        output_file = str(tmp_out)
-
-    # Move result to desired output
-    Path(str(tmp_out)).rename(output_file)
-
+    tmp_enc = Path(tempfile.gettempdir()) / f"hybdec_{secrets.token_hex(8)}.enc"
+    tmp_out = Path(tempfile.gettempdir()) / f"hybdec_{secrets.token_hex(8)}.dec"
+    
     try:
-        tmp_enc.unlink()
-    except Exception:
-        pass
+        tmp_enc.write_bytes(ciphertext)
+        
+        key_bits = 256 if algorithm == "AES-256" else (192 if algorithm == "AES-192" else 128)
+        AES_MODULE.desencriptar_archivo_AES(
+            file_path=str(tmp_enc), 
+            modeAES=mode, 
+            key=sym_key, 
+            iv=iv, 
+            key_length_bits=key_bits, 
+            output_path=str(tmp_out)
+        )
 
-    return output_file
+        if output_file is None:
+            output_file = str(tmp_out)
+        else:
+            # Move result to desired output
+            tmp_out.rename(output_file)
+
+        return output_file
+    finally:
+        try:
+            tmp_enc.unlink()
+        except Exception:
+            pass
+        try:
+            tmp_out.unlink()
+        except Exception:
+            pass
