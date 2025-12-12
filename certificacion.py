@@ -37,7 +37,10 @@ def _derive_key_from_license(license_number: str) -> bytes:
     """
     Deriva una clave criptográfica (hash) usando el texto plano de la licencia.
     """
-    return hashlib.sha256(license_number.encode("utf-8")).digest()
+    # Normalize license to avoid accidental whitespace differences
+    if license_number is None:
+        license_number = ""
+    return hashlib.sha256(license_number.strip().encode("utf-8")).digest()
 
 
 def get_license() -> str:
@@ -88,9 +91,10 @@ def create_ca(license_number_input: str = None, key_size: int = 2048) -> None:
     else:
         if not license_number_input:
             raise ValueError("No existe license.txt y no se proporcionó ninguna licencia para crear la CA.")
-        # Guardamos la licencia en texto plano como se solicitó
-        LICENSE_FILE.write_text(license_number_input, encoding="utf-8")
-        final_license = license_number_input
+        # Guardamos la licencia en texto plano normalizada (sin espacios finales/incipientes)
+        normalized = license_number_input.strip()
+        LICENSE_FILE.write_text(normalized, encoding="utf-8")
+        final_license = normalized
 
     # Generate RSA key
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=key_size)
@@ -157,9 +161,19 @@ def _load_ca_private():
     
     key = _derive_key_from_license(license_number)
     
-    # Decrypt to temp plaintext
+    # Decrypt to temp plaintext - try with normalized license first
     tmp_out = Path(str(tmp_enc) + ".dec")
-    AES_MODULE.desencriptar_archivo_AES(file_path=str(tmp_enc), modeAES="CBC", key=key, iv=iv, key_length_bits=256, output_path=str(tmp_out))
+    try:
+        AES_MODULE.desencriptar_archivo_AES(file_path=str(tmp_enc), modeAES="CBC", key=key, iv=iv, key_length_bits=256, output_path=str(tmp_out))
+    except Exception:
+        # If decryption failed, try fallback using the raw license contents (historic bug: write without strip)
+        try:
+            raw_license = LICENSE_FILE.read_text(encoding="utf-8")
+            fallback_key = _derive_key_from_license(raw_license)
+            AES_MODULE.desencriptar_archivo_AES(file_path=str(tmp_enc), modeAES="CBC", key=fallback_key, iv=iv, key_length_bits=256, output_path=str(tmp_out))
+        except Exception:
+            # Re-raise the original exception for consumers to handle
+            raise
 
     priv = serialization.load_pem_private_key(tmp_out.read_bytes(), password=None, backend=default_backend())
 

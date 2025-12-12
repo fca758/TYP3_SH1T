@@ -517,49 +517,23 @@ class App(tk.Tk):
             ca_frame = tk.Frame(frame, bg="#f0f0f0", padx=10, pady=10)
             ca_frame.pack(fill=tk.X, pady=(0, 15))
 
-            tk.Label(ca_frame, text="Número de licencia:", bg="#f0f0f0").pack(anchor=tk.W)
-            lic_var = tk.StringVar()
-            lic_entry = tk.Entry(ca_frame, textvariable=lic_var, width=50)
-            lic_entry.pack(fill=tk.X, pady=(0, 10))
-            # If a license already exists in storage, show it and prevent editing
+            # Mostrar estado: licencia y CA
             try:
                 existing_lic = certificacion.get_license()
-                lic_var.set(existing_lic)
-                lic_entry.config(state='disabled')
-                tk.Label(ca_frame, text="(Licencia ya configurada — no puede cambiarse)", bg="#f0f0f0", fg="#7f8c8d").pack(anchor=tk.W)
+                tk.Label(ca_frame, text=f"Número de licencia: {existing_lic}", bg="#f0f0f0").pack(anchor=tk.W)
+                tk.Label(ca_frame, text="(Licencia configurada — no editable desde la GUI)", bg="#f0f0f0", fg="#7f8c8d").pack(anchor=tk.W)
             except Exception:
                 existing_lic = None
+                tk.Label(ca_frame, text="Número de licencia: (no configurada)", bg="#f0f0f0", fg="#c0392b").pack(anchor=tk.W)
             
-            def _create_ca():
-                lic = lic_var.get().strip()
-                if not lic:
-                    messagebox.showwarning("Licencia", "Introduce el número de licencia para crear la CA")
-                    return
-                try:
-                    # Prevent creating CA with different license if already set
-                    if existing_lic and existing_lic != lic:
-                        messagebox.showerror("Licencia", "No se puede cambiar el número de licencia existente.")
-                        return
-                    certificacion.create_ca(lic)
-                    messagebox.showinfo("✓ CA creada", "CA creada y almacenada con éxito")
-                    # Disable editing of license and disable the create button
-                    try:
-                        lic_entry.delete(0, tk.END)
-                        lic_entry.insert(0, lic)
-                        lic_entry.config(state='disabled')
-                        create_ca_btn.config(state='disabled')
-                        tk.Label(ca_frame, text="(Licencia configurada)", bg="#f0f0f0", fg="#7f8c8d").pack(anchor=tk.W)
-                    except Exception:
-                        pass
-                except Exception as e:
-                    messagebox.showerror("✕ Error CA", f"Error creando CA: {e}")
-
-            create_ca_btn = tk.Button(ca_frame, text="Crear CA", command=_create_ca, bg="#3498db", fg="white")
-            create_ca_btn.pack(anchor=tk.W)
-            # If CA already exists, disable creating it again
+            # Nota: Ya no se permite crear una nueva licencia/CA desde la GUI.
+            # La CA debe haber sido creada externamente o desde la línea de comandos.
+            # Mostramos en la GUI si la CA ya existe o no.
             try:
                 if certificacion.has_ca():
-                    create_ca_btn.config(state='disabled')
+                    tk.Label(ca_frame, text="CA encontrada y configurada ", bg="#f0f0f0", fg="#27ae60").pack(anchor=tk.W)
+                else:
+                    tk.Label(ca_frame, text="CA no encontrada (crear CA desde la línea de comandos)", bg="#f0f0f0", fg="#c0392b").pack(anchor=tk.W)
             except Exception:
                 pass
 
