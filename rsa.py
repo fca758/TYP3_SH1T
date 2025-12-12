@@ -5,7 +5,6 @@ from cryptography.hazmat.backends import default_backend
 import secrets
 import os
 
-PADDING_RSA="OAEP"
 class RSA:
     
     def _load_public_key(self, clavePublica):
@@ -36,23 +35,18 @@ class RSA:
         else:
             return clavePrivada
 
-    def _get_padding(self, modeRSA: str):
+    def _get_padding(self):
         """Devuelve el padding correcto según el modo RSA."""
-        if modeRSA.upper() == "OAEP":
-            return asym_padding.OAEP(
-                mgf=asym_padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
-            )
-        elif modeRSA.upper() == "PKCS1V15":
-            return asym_padding.PKCS1v15()
-        else:
-            raise ValueError("Modo RSA no soportado. Usa 'OAEP' o 'PKCS1v15'.")
+        return asym_padding.OAEP(
+            mgf=asym_padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
 
     def encriptar_archivo_RSA(self, file_path: str, clavePublica, output_path: str = None):
         """Encripta un archivo con RSA usando la clave pública y el modo indicado."""
         public_key = self._load_public_key(clavePublica)
-        padding_mode = self._get_padding(PADDING_RSA)
+        padding_mode = self._get_padding()
 
         file_path = Path(file_path)
         with open(file_path, "rb") as f:
@@ -73,7 +67,7 @@ class RSA:
     def desencriptar_archivo_RSA(self, file_path: str, clavePrivada, output_path: str = None):
         """Desencripta un archivo con RSA usando la clave privada y el modo indicado."""
         private_key = self._load_private_key(clavePrivada)
-        padding_mode = self._get_padding(PADDING_RSA)
+        padding_mode = self._get_padding()
 
         file_path = Path(file_path)
         with open(file_path, "rb") as f:
