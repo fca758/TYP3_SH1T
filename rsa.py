@@ -36,7 +36,6 @@ class RSA:
             return clavePrivada
 
     def _get_padding(self):
-        """Devuelve el padding correcto según el modo RSA."""
         return asym_padding.OAEP(
             mgf=asym_padding.MGF1(algorithm=hashes.SHA256()),
             algorithm=hashes.SHA256(),
