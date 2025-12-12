@@ -5,6 +5,7 @@ from cryptography.hazmat.backends import default_backend
 import secrets
 import os
 
+PADDING_RSA="OAEP"
 class RSA:
     
     def _load_public_key(self, clavePublica):
@@ -48,10 +49,10 @@ class RSA:
         else:
             raise ValueError("Modo RSA no soportado. Usa 'OAEP' o 'PKCS1v15'.")
 
-    def encriptar_archivo_RSA(self, file_path: str, modeRSA: str, clavePublica, output_path: str = None):
+    def encriptar_archivo_RSA(self, file_path: str, clavePublica, output_path: str = None):
         """Encripta un archivo con RSA usando la clave pública y el modo indicado."""
         public_key = self._load_public_key(clavePublica)
-        padding_mode = self._get_padding(modeRSA)
+        padding_mode = self._get_padding(PADDING_RSA)
 
         file_path = Path(file_path)
         with open(file_path, "rb") as f:
@@ -69,10 +70,10 @@ class RSA:
 
         print(f"[✔] Archivo encriptado correctamente: {output_path}")
 
-    def desencriptar_archivo_RSA(self, file_path: str, modeRSA: str, clavePrivada, output_path: str = None):
+    def desencriptar_archivo_RSA(self, file_path: str, clavePrivada, output_path: str = None):
         """Desencripta un archivo con RSA usando la clave privada y el modo indicado."""
         private_key = self._load_private_key(clavePrivada)
-        padding_mode = self._get_padding(modeRSA)
+        padding_mode = self._get_padding(PADDING_RSA)
 
         file_path = Path(file_path)
         with open(file_path, "rb") as f:
