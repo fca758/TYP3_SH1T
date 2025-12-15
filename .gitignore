@@ -149,3 +149,8 @@ tempCodeRunnerFile.py
 
 # Ignore encrypted keys directory
 Keys/
+
+# Ignorar los certificados de los usuarios
+certs/users/*
+
+certs/user_keys/*

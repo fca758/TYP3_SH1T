@@ -75,7 +75,7 @@ def _derive_key_from_password(password: str, salt: bytes) -> bytes:
     return kdf.derive(password.encode("utf-8"))
 
 
-def create_ca(aes_key_hex: str = None, key_size: int = 2048) -> None:
+def create_ca(aes_key_hex: str = None, key_size: int = 2048, force: bool = False) -> None:
     """
     Genera clave RSA de la autoridad (CA).
     Guarda la clave AES en 'certs/license.txt' en formato hexadecimal y la usa para cifrar la clave privada de la CA.
@@ -84,14 +84,32 @@ def create_ca(aes_key_hex: str = None, key_size: int = 2048) -> None:
         aes_key_hex (str, opcional): Clave AES de 32 bytes en formato hexadecimal (64 caracteres).
                                       Si no se proporciona, se genera una aleatoria.
         key_size (int): Tamaño de la clave RSA en bits (default: 2048)
+        force (bool): Si es True, sobrescribe CA existente. Si es False, lanza error si CA existe.
+    
+    Raises:
+        RuntimeError: Si CA ya existe y force=False
     """
     _ensure_dirs()
     priv_path = CA_DIR / "ca_private.enc"
     pub_path = CA_DIR / "ca_public.pem"
 
-    # Si ya existe CA, eliminarla primero para recrearla
-    if has_ca():
-        print("⚠ Ya existe una CA. Eliminándola para crear una nueva...")
+    # PROTECCIÓN: Evitar sobrescritura accidental de CA
+    if has_ca() and not force:
+        raise RuntimeError(
+            "⚠ ERROR: Ya existe una CA en el sistema.\n"
+            "Para proteger la integridad de los certificados existentes, "
+            "no se permite sobrescribir la CA.\n"
+            "Si realmente deseas crear una nueva CA (esto invalidará TODOS los certificados existentes), "
+            "debes eliminar manualmente los archivos:\n"
+            f"  - {pub_path}\n"
+            f"  - {priv_path}\n"
+            f"  - {LICENSE_FILE}\n"
+            "O llamar a create_ca() con force=True (solo desde código)."
+        )
+    
+    # Si force=True y CA existe, eliminarla
+    if has_ca() and force:
+        print("⚠ ADVERTENCIA: Eliminando CA existente (force=True)...")
         try:
             priv_path.unlink()
             pub_path.unlink()
@@ -507,11 +525,31 @@ def decrypt_hybrid_file(hybrid_file: str, identity: str, password: str, output_f
             output_path=str(tmp_out)
         )
 
+        # Si no se especifica output_file, crear archivo permanente en mismo directorio
         if output_file is None:
-            output_file = str(tmp_out)
+            # Guardar en el mismo directorio que el archivo original
+            input_path = Path(hybrid_file)
+            base_name = input_path.stem
+            
+            # Remover .txt del stem si existe
+            if base_name.endswith('.txt'):
+                base_name = base_name[:-4]
+            
+            # Determinar extensión apropiada
+            original_ext = input_path.suffix.replace('.hybenc', '')
+            if not original_ext:
+                original_ext = '.txt'
+            
+            # Crear ruta completa en el mismo directorio
+            output_file = str(input_path.parent / f"{base_name}_decrypted{original_ext}")
+            
+            # Copiar contenido del temporal al archivo permanente
+            import shutil
+            shutil.copy2(tmp_out, output_file)
         else:
-            # Move result to desired output
-            tmp_out.rename(output_file)
+            # Copiar a la ubicación especificada
+            import shutil
+            shutil.copy2(tmp_out, output_file)
 
         return output_file
     finally:

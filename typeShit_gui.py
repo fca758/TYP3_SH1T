@@ -279,6 +279,28 @@ class App(tk.Tk):
         try:
             sys.stdout = buf
             if action == "encrypt":
+                # Validar usuario activo y pedir contraseña ANTES de encriptar
+                active_user = self.user_var.get()
+                password = None
+                
+                if active_user != "Seleccionar usuario...":
+                    from tkinter import simpledialog
+                    password = simpledialog.askstring("Autenticación", 
+                        f"Contraseña de {active_user} para cifrar y guardar clave:", 
+                        show='*', 
+                        parent=self)
+                    
+                    if not password:
+                        print("⚠ Operación cancelada por el usuario")
+                        return
+
+                    # Validar contraseña intentando descifrar la clave privada
+                    try:
+                        certificacion._decrypt_user_private_key(active_user, password)
+                    except Exception as e:
+                        messagebox.showerror("Error de Autenticación", f"Contraseña incorrecta para {active_user}.\nNo se iniciará el cifrado.")
+                        return
+
                 # ENCRIPTACIÓN DEL ARCHIVO
                 try:
                     # Si hay destinatarios seleccionados, usar cifrado híbrido
@@ -297,6 +319,35 @@ class App(tk.Tk):
                             try:
                                 self.iv_var.set(iv.hex())
                                 print(f"IV generado: {iv.hex()}")
+                                
+                                # Guardar clave automáticamente usando la contraseña validada
+                                if active_user != "Seleccionar usuario..." and password:
+                                    try:
+                                        import user_keys
+                                        from pathlib import Path
+                                        import re
+                                        
+                                        # Normalizar clave a bytes
+                                        key_bytes = key
+                                        if isinstance(key, str):
+                                            if re.fullmatch(r"[0-9a-fA-F]+", key) and len(key) % 2 == 0:
+                                                try:
+                                                    key_bytes = bytes.fromhex(key)
+                                                except Exception:
+                                                    key_bytes = key.encode("utf-8")
+                                            else:
+                                                key_bytes = key.encode("utf-8")
+                                        
+                                        filename = Path(infile).name
+                                        user_keys.store_user_key(
+                                            active_user, password, 
+                                            key_bytes, iv, algo, mode, filename
+                                        )
+                                        print(f"✓ Clave guardada automáticamente en el almacén de {active_user}")
+                                    except Exception as e:
+                                        print(f"⚠ Error guardando clave: {e}")
+                                        import traceback
+                                        traceback.print_exc()
                             except Exception:
                                 pass
                 except Exception as e:
@@ -311,12 +362,21 @@ class App(tk.Tk):
                     if infile.lower().endswith('.hybenc'):
                         try:
                             from tkinter import simpledialog
-                            ident = simpledialog.askstring("Identidad", "Introduce tu identidad para buscar certificado:", parent=self)
-                            if not ident:
-                                raise ValueError("Identidad no proporcionada")
-                            pw = simpledialog.askstring("Contraseña", f"Contraseña para la clave privada de {ident}:", show='*', parent=self)
+                            
+                            # Usar usuario activo del combobox
+                            ident = self.user_var.get()
+                            if ident == "Seleccionar usuario...":
+                                messagebox.showerror("Error", "Debes seleccionar un usuario activo primero")
+                                raise ValueError("No hay usuario activo seleccionado")
+                            
+                            # Solo pedir contraseña
+                            pw = simpledialog.askstring("Contraseña", 
+                                f"Contraseña para descifrar como {ident}:", 
+                                show='*', 
+                                parent=self)
                             if pw is None:
                                 raise ValueError("Contraseña no proporcionada")
+                            
                             out = certificacion.decrypt_hybrid_file(hybrid_file=infile, identity=ident, password=pw, output_file=None)
                             print(f"Archivo descifrado por {ident} → {out}")
                         except Exception:
@@ -381,74 +441,86 @@ class App(tk.Tk):
             pass
 
     def buscarClaveGuardada(self) -> None:
-        """Muestra un diálogo con las claves guardadas y permite seleccionar una."""
+        """Muestra las claves guardadas del usuario activo (requiere contraseña)."""
+        # Obtener usuario activo
+        active_user = self.user_var.get()
+        if active_user == "Seleccionar usuario...":
+            messagebox.showerror("Error", "Debes seleccionar un usuario activo primero")
+            return
+        
+        # Solicitar contraseña
+        from tkinter import simpledialog
+        password = simpledialog.askstring("Contraseña", 
+            f"Contraseña de {active_user} para ver claves guardadas:", 
+            show='*', 
+            parent=self)
+        
+        if not password:
+            return
+        
+        # Validar contraseña explícitamente antes de intentar leer las claves
         try:
-            stored_keys = get_stored_keys()
+            import certificacion
+            # Intentar descifrar la clave privada para validar la contraseña
+            certificacion._decrypt_user_private_key(active_user, password)
+        except Exception:
+            messagebox.showerror("Error de Autenticación", f"Contraseña incorrecta para {active_user}.")
+            return
+
+        # Obtener claves del usuario (ahora es seguro proceder)
+        try:
+            import user_keys
+            stored_keys = user_keys.get_user_keys(active_user, password)
+        except FileNotFoundError:
+            messagebox.showinfo("Sin claves", f"No hay claves guardadas para {active_user}")
+            return
+        except ValueError as e:
+            # Aunque ya validamos, mantenemos esto por seguridad extra
+            messagebox.showerror("Error", f"Contraseña incorrecta o error al leer claves: {e}")
+            return
         except Exception as e:
-            messagebox.showerror("Error", f"Error al leer claves guardadas: {e}")
+            messagebox.showerror("Error", f"Error al leer claves: {e}")
             return
 
         if not stored_keys:
-            messagebox.showinfo("Sin claves", "No hay claves guardadas.")
+            messagebox.showinfo("Sin claves", f"No hay claves guardadas para {active_user}")
             return
 
         # Heredar estilos de la ventana principal
         label_bg = None if self.panel_image is not None else "#222222"
         label_fg = "#79b670" if self.panel_image is None else "#000000"
-        entry_bg = "#c39c9c" if self.panel_image is not None else "#333333"
-        entry_fg = "#000000" if self.panel_image is not None else "#ffffff"
         button_bg = "#3a8b8a" if self.panel_image is None else None
         button_fg = "#000000"
 
         # Crear diálogo de selección
         dialog = tk.Toplevel(self)
-        dialog.title("Claves guardadas")
+        dialog.title(f"🔑 Claves de {active_user}")
         dialog.transient(self)
         dialog.grab_set()
         dialog.configure(bg=label_bg)
+        dialog.geometry("700x400")
 
         # Lista de claves
         frame = tk.Frame(dialog, bg=label_bg, padx=10, pady=10)
-        frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        frame.pack(fill=tk.BOTH, expand=True)
 
         # Headers
-        tk.Label(frame, text="Fecha", bg=label_bg, fg=label_fg).grid(row=0, column=0, padx=5)
-        tk.Label(frame, text="Algoritmo", bg=label_bg, fg=label_fg).grid(row=0, column=1, padx=5)
-        tk.Label(frame, text="Modo", bg=label_bg, fg=label_fg).grid(row=0, column=2, padx=5)
-        tk.Label(frame, text="Clave", bg=label_bg, fg=label_fg).grid(row=0, column=3, padx=5)
-
+        tk.Label(frame, text="Fecha", bg=label_bg, fg=label_fg, font=("Arial", 9, "bold")).grid(row=0, column=0, padx=5, pady=5)
+        tk.Label(frame, text="Algoritmo", bg=label_bg, fg=label_fg, font=("Arial", 9, "bold")).grid(row=0, column=1, padx=5, pady=5)
+        tk.Label(frame, text="Modo", bg=label_bg, fg=label_fg, font=("Arial", 9, "bold")).grid(row=0, column=2, padx=5, pady=5)
+        tk.Label(frame, text="Archivo", bg=label_bg, fg=label_fg, font=("Arial", 9, "bold")).grid(row=0, column=3, padx=5, pady=5)
+        tk.Label(frame, text="Clave", bg=label_bg, fg=label_fg, font=("Arial", 9, "bold")).grid(row=0, column=4, padx=5, pady=5)
 
         # Función para eliminar una clave
-        def delete_key(entry):
-            # Eliminar la entrada del almacén y refrescar el diálogo
+        def delete_key(index):
             try:
-                from typeShit import get_stored_keys, KEYS_FILE, _encrypt_keys_file, _decrypt_keys_file
-                _decrypt_keys_file()
-                entries = []
-                if KEYS_FILE.exists():
-                    import json
-                    with open(KEYS_FILE, "r") as f:
-                        content = f.read().strip()
-                        if content:
-                            entries = json.loads(content)
-                # Filtrar fuera la entrada a eliminar
-                entries = [e for e in entries if not (
-                    e.get("key") == entry["key"] and
-                    e.get("algorithm") == entry["algorithm"] and
-                    e.get("mode") == entry["mode"] and
-                    e.get("timestamp") == entry["timestamp"]
-                )]
-                # Guardar actualizado
-                with open(KEYS_FILE, "w") as f:
-                    json.dump(entries, f, indent=2)
-                _encrypt_keys_file()
-                if KEYS_FILE.exists():
-                    KEYS_FILE.unlink()
+                import user_keys
+                user_keys.delete_user_key(active_user, password, index)
+                messagebox.showinfo("Éxito", "Clave eliminada correctamente")
+                dialog.destroy()
+                self.buscarClaveGuardada()  # Refrescar
             except Exception as e:
                 messagebox.showerror("Error", f"No se pudo eliminar la clave: {e}")
-            # Refrescar el diálogo
-            dialog.destroy()
-            self.buscarClaveGuardada()
 
         # Función para seleccionar una clave
         def select_key(entry):
@@ -468,28 +540,40 @@ class App(tk.Tk):
             else:
                 self.iv_var.set("")
                 self.selected_iv = None
+            
             self.output_txt.delete("1.0", tk.END)
-            self.output_txt.insert(tk.END, f"Clave seleccionada:\n")
+            self.output_txt.insert(tk.END, f"✓ Clave seleccionada\n")
+            self.output_txt.insert(tk.END, f"  Usuario: {active_user}\n")
             self.output_txt.insert(tk.END, f"  Fecha: {entry['timestamp']}\n")
             self.output_txt.insert(tk.END, f"  Algoritmo: {entry['algorithm']}\n")
             self.output_txt.insert(tk.END, f"  Modo: {entry['mode']}\n")
             self.output_txt.insert(tk.END, f"  Clave: {entry['key']}\n")
             if entry.get("iv"):
                 self.output_txt.insert(tk.END, f"  IV: {entry['iv']}\n")
+            if entry.get("filename"):
+                self.output_txt.insert(tk.END, f"  Archivo: {entry['filename']}\n")
             dialog.destroy()
 
         # Mostrar claves
-        for i, entry in enumerate(stored_keys, 1):
-            tk.Label(frame, text=entry["timestamp"][:16], bg=label_bg, fg=label_fg).grid(row=i, column=0, padx=5)
-            tk.Label(frame, text=entry["algorithm"], bg=label_bg, fg=label_fg).grid(row=i, column=1, padx=5)
-            tk.Label(frame, text=entry["mode"], bg=label_bg, fg=label_fg).grid(row=i, column=2, padx=5)
-            key_preview = entry["key"][:16] + "..."
-            tk.Label(frame, text=key_preview, bg=label_bg, fg=label_fg).grid(row=i, column=3, padx=5)
-            tk.Button(frame, text="Seleccionar", command=lambda e=entry: select_key(e), bg=button_bg, fg=button_fg).grid(row=i, column=4, padx=5)
-            tk.Button(frame, text="Eliminar", command=lambda e=entry: delete_key(e), bg="#c0392b", fg="white").grid(row=i, column=5, padx=5)
+        for i, entry in enumerate(stored_keys):
+            tk.Label(frame, text=entry["timestamp"][:16], bg=label_bg, fg=label_fg).grid(row=i+1, column=0, padx=5, pady=2)
+            tk.Label(frame, text=entry["algorithm"], bg=label_bg, fg=label_fg).grid(row=i+1, column=1, padx=5, pady=2)
+            tk.Label(frame, text=entry["mode"], bg=label_bg, fg=label_fg).grid(row=i+1, column=2, padx=5, pady=2)
+            
+            # Mostrar nombre de archivo si existe
+            filename = entry.get("filename", "Sin nombre")
+            if len(filename) > 20:
+                filename = filename[:17] + "..."
+            tk.Label(frame, text=filename, bg=label_bg, fg=label_fg).grid(row=i+1, column=3, padx=5, pady=2)
+            
+            key_preview = entry["key"][:12] + "..."
+            tk.Label(frame, text=key_preview, bg=label_bg, fg=label_fg).grid(row=i+1, column=4, padx=5, pady=2)
+            tk.Button(frame, text="Seleccionar", command=lambda e=entry: select_key(e), bg=button_bg, fg=button_fg).grid(row=i+1, column=5, padx=5, pady=2)
+            tk.Button(frame, text="Eliminar", command=lambda idx=i: delete_key(idx), bg="#c0392b", fg="white").grid(row=i+1, column=6, padx=5, pady=2)
 
         # Botón de cerrar
-        tk.Button(frame, text="Cerrar", command=dialog.destroy, bg=button_bg, fg=button_fg).grid(row=len(stored_keys)+1, column=0, columnspan=5, pady=10)
+        close_btn = tk.Button(frame, text="Cerrar", command=dialog.destroy, bg=button_bg, fg=button_fg, width=15)
+        close_btn.grid(row=len(stored_keys)+2, column=0, columnspan=7, pady=10)
 
         # Centrar diálogo
         dialog.update_idletasks()
@@ -506,7 +590,7 @@ class App(tk.Tk):
             dialog.title("Gestionar certificados")
             dialog.transient(self)
             dialog.grab_set()
-            dialog.geometry("550x450")
+            dialog.geometry("550x550")  # Aumentado de 450 a 550 para ver todos los botones
             dialog.resizable(False, False)
 
 
@@ -621,7 +705,7 @@ class App(tk.Tk):
 
 
     def select_recipients(self) -> None:
-        """Permite seleccionar uno o varios destinatarios para cifrado híbrido."""
+        """Permite seleccionar uno o varios destinatarios para cifrado híbrido con interfaz mejorada."""
         try:
             certs = certificacion.list_certificates()
             valid_certs = [c for c in certs if c.get('valid')]
@@ -634,35 +718,159 @@ class App(tk.Tk):
             return
 
         dialog = tk.Toplevel(self)
-        dialog.title("Cifrado múltiple - Seleccionar destinatarios")
+        dialog.title("🔐 Cifrado Múltiple - Seleccionar Destinatarios")
         dialog.transient(self)
         dialog.grab_set()
-        dialog.geometry("500x400")
+        dialog.geometry("550x500")
+        dialog.configure(bg="#f5f5f5")
 
         # Frame principal
-        frame = tk.Frame(dialog, padx=10, pady=10)
-        frame.pack(fill=tk.BOTH, expand=True)
+        main_frame = tk.Frame(dialog, padx=20, pady=20, bg="#f5f5f5")
+        main_frame.pack(fill=tk.BOTH, expand=True)
 
-        tk.Label(frame, text="Selecciona los usuarios que podrán descifrar el archivo:", 
-                 font=("Arial", 10, "bold")).pack(anchor=tk.W, pady=(0, 10))
+        # Título
+        title_label = tk.Label(
+            main_frame, 
+            text="Selecciona los usuarios que podrán descifrar el archivo:", 
+            font=("Arial", 11, "bold"),
+            bg="#f5f5f5",
+            fg="#2c3e50"
+        )
+        title_label.pack(anchor=tk.W, pady=(0, 15))
 
-        # Listbox con selección múltiple
-        lb = tk.Listbox(frame, selectmode=tk.MULTIPLE, width=60, height=15, font=("Arial", 9))
-        lb.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        # Frame con scroll para los usuarios
+        canvas_frame = tk.Frame(main_frame, bg="#f5f5f5")
+        canvas_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
 
-        # Agregar usuarios válidos
-        for c in valid_certs:
-            lb.insert(tk.END, f"✓ {c.get('identity')}")
+        # Canvas y scrollbar
+        canvas = tk.Canvas(canvas_frame, bg="#f5f5f5", highlightthickness=0)
+        scrollbar = tk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg="#f5f5f5")
 
-        # Frame de botones
-        btn_frame = tk.Frame(frame)
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Diccionario para rastrear selecciones
+        selected_users = {}
+
+        def toggle_user(identity, button):
+            """Toggle user selection and update button appearance"""
+            if identity in selected_users and selected_users[identity]:
+                # Deseleccionar
+                selected_users[identity] = False
+                button.configure(
+                    bg="#ecf0f1",
+                    fg="#2c3e50",
+                    relief=tk.RAISED,
+                    text=f"□ {identity}"
+                )
+            else:
+                # Seleccionar
+                selected_users[identity] = True
+                button.configure(
+                    bg="#27ae60",
+                    fg="white",
+                    relief=tk.SUNKEN,
+                    text=f"✓ {identity}"
+                )
+
+        # Crear botón para cada usuario
+        for idx, cert in enumerate(valid_certs):
+            identity = cert.get('identity')
+            selected_users[identity] = False
+
+            # Frame para cada usuario
+            user_frame = tk.Frame(scrollable_frame, bg="#f5f5f5")
+            user_frame.pack(fill=tk.X, pady=5, padx=5)
+
+            # Botón de usuario
+            user_btn = tk.Button(
+                user_frame,
+                text=f"□ {identity}",
+                font=("Arial", 10),
+                bg="#ecf0f1",
+                fg="#2c3e50",
+                activebackground="#bdc3c7",
+                activeforeground="#2c3e50",
+                relief=tk.RAISED,
+                bd=2,
+                padx=20,
+                pady=12,
+                cursor="hand2",
+                anchor="w",
+                width=40,
+                command=lambda i=identity, b=None: toggle_user(i, user_btn)
+            )
+            # Guardar referencia al botón para poder actualizarlo
+            user_btn.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+            # Actualizar el comando con la referencia correcta al botón
+            user_btn.configure(command=lambda i=identity, b=user_btn: toggle_user(i, b))
+
+        # Contador de seleccionados
+        count_label = tk.Label(
+            main_frame,
+            text="Seleccionados: 0",
+            font=("Arial", 9),
+            bg="#f5f5f5",
+            fg="#7f8c8d"
+        )
+        count_label.pack(anchor=tk.W, pady=(0, 10))
+
+        def update_count():
+            """Actualizar contador de usuarios seleccionados"""
+            count = sum(1 for v in selected_users.values() if v)
+            count_label.configure(text=f"Seleccionados: {count}")
+            dialog.after(100, update_count)
+
+        update_count()
+
+        # Frame de botones de acción
+        btn_frame = tk.Frame(main_frame, bg="#f5f5f5")
         btn_frame.pack(fill=tk.X, pady=(10, 0))
 
+        def _select_all():
+            """Seleccionar todos los usuarios"""
+            for child in scrollable_frame.winfo_children():
+                for widget in child.winfo_children():
+                    if isinstance(widget, tk.Button):
+                        identity = widget.cget("text").replace("□ ", "").replace("✓ ", "")
+                        if identity in selected_users and not selected_users[identity]:
+                            toggle_user(identity, widget)
+
+        def _deselect_all():
+            """Deseleccionar todos los usuarios"""
+            for child in scrollable_frame.winfo_children():
+                for widget in child.winfo_children():
+                    if isinstance(widget, tk.Button):
+                        identity = widget.cget("text").replace("□ ", "").replace("✓ ", "")
+                        if identity in selected_users and selected_users[identity]:
+                            toggle_user(identity, widget)
+
         def _ok():
-            sels = [valid_certs[i].get('identity') for i in lb.curselection()]
+            """Confirmar selección"""
+            sels = [identity for identity, selected in selected_users.items() if selected]
             if not sels:
                 messagebox.showwarning("Sin selección", "Debes seleccionar al menos un destinatario.")
                 return
+            
+            # Auto-inclusión obligatoria del usuario activo
+            active_user = self.user_var.get()
+            if active_user != "Seleccionar usuario...":
+                if active_user not in sels:
+                    sels.append(active_user)
+                    messagebox.showinfo("Auto-inclusión", 
+                        f"✓ Te has añadido automáticamente ({active_user}) a los destinatarios.\n"
+                        f"Esto te permite descifrar el archivo más tarde.")
+            
             self.recipients = sels
             self.output_txt.delete('1.0', tk.END)
             self.output_txt.insert(tk.END, f"✓ Cifrado múltiple configurado\n")
@@ -671,8 +879,48 @@ class App(tk.Tk):
             dialog.destroy()
 
         def _cancel():
+            """Cancelar selección"""
             dialog.destroy()
 
-        tk.Button(btn_frame, text="✓ Confirmar", command=_ok, width=15, bg="#27ae60", fg="white").pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="✕ Cancelar", command=_cancel, width=15, bg="#e74c3c", fg="white").pack(side=tk.LEFT, padx=5)
+        # Botones de acción
+        tk.Button(
+            btn_frame, 
+            text="Seleccionar Todos", 
+            command=_select_all, 
+            width=15, 
+            bg="#3498db", 
+            fg="white",
+            font=("Arial", 9)
+        ).pack(side=tk.LEFT, padx=5)
+
+        tk.Button(
+            btn_frame, 
+            text="Deseleccionar Todos", 
+            command=_deselect_all, 
+            width=15, 
+            bg="#95a5a6", 
+            fg="white",
+            font=("Arial", 9)
+        ).pack(side=tk.LEFT, padx=5)
+
+        tk.Button(
+            btn_frame, 
+            text="✓ Confirmar", 
+            command=_ok, 
+            width=12, 
+            bg="#27ae60", 
+            fg="white",
+            font=("Arial", 9, "bold")
+        ).pack(side=tk.RIGHT, padx=5)
+
+        tk.Button(
+            btn_frame, 
+            text="✕ Cancelar", 
+            command=_cancel, 
+            width=12, 
+            bg="#e74c3c", 
+            fg="white",
+            font=("Arial", 9)
+        ).pack(side=tk.RIGHT, padx=5)
+
 
