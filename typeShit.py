@@ -23,7 +23,6 @@ bytes_req = {
 
 KEYS_DIR = Path("Keys")
 KEYS_FILE = KEYS_DIR / "keys.txt"
-RSA_MODE = "OAEP"  # Más seguro que PKCS1v15 para nuevas implementaciones
 
 def _ensure_rsa_keys():
     """Asegura que existan las claves RSA para el cifrado del archivo de claves."""
@@ -80,7 +79,7 @@ def _encrypt_keys_file():
             f.write(sym_key + iv)
 
         # Encrypt the symmetric key blob with RSA and save as .key
-        rsa.encriptar_archivo_RSA(str(tmp_sym), RSA_MODE, str(pub_key_path), str(KEYS_FILE) + ".key")
+        rsa.encriptar_archivo_RSA(str(tmp_sym), str(pub_key_path), str(KEYS_FILE) + ".key")
 
         # Remove temporary symmetric key blob
         try:
@@ -99,7 +98,7 @@ def _decrypt_keys_file():
         priv_key_path = KEYS_DIR / "private.pem"
         tmp_sym = KEYS_DIR / ".tmp_sym.dec"
         # Decrypt the symmetric key blob to temp
-        rsa.desencriptar_archivo_RSA(str(enc_key), RSA_MODE, str(priv_key_path), str(tmp_sym))
+        rsa.desencriptar_archivo_RSA(str(enc_key), str(priv_key_path), str(tmp_sym))
 
         # Read sym_key and iv
         data = tmp_sym.read_bytes()
@@ -182,7 +181,6 @@ def store_key(key: bytes, iv: bytes, algorithm: str, mode: str):
 
 def get_stored_keys():
     """Recupera las claves almacenadas en el archivo encriptado keys.txt."""
-    _ensure_rsa_keys()
     
     # Desencriptar archivo
     _decrypt_keys_file()
@@ -238,6 +236,8 @@ def _normalize_key(key: Union[None, str, bytes], algorithm: str) -> bytes:
 
 
 def encriptacionArchivo(input_file: str, output_file: Optional[str], mode: str, key, algorithm: str = None) -> Optional[bytes]:
+
+    _ensure_rsa_keys()
     # Basic logging
     print("[ENCRYPT] handler called")
     print(f"  input_file = {input_file}")
@@ -276,6 +276,8 @@ def encriptacionArchivo(input_file: str, output_file: Optional[str], mode: str, 
 
 
 def desencriptarArchivo(input_file: str, output_file: Optional[str], mode: str, key: str, iv: Optional[Union[str, bytes]] = None, algorithm: str = None) -> None:
+
+    _ensure_rsa_keys()
     # Basic logging
     print("[DECRYPT] handler called")
     print(f"  input_file = {input_file}")
