@@ -22,16 +22,54 @@ USERS_DIR = ROOT / "users"
 CA_DIR = ROOT / "ca"
 # Aquí definimos obligatoriamente el archivo de licencia en texto plano
 LICENSE_FILE = ROOT / "license.txt"
+ARCHIVE_DIR = CA_DIR / "archive"
 
 SEPARATOR = b"\n---CERTMETA-END---\n"
 
 def _ensure_dirs():
-    for d in (ROOT, USERS_DIR, CA_DIR):
+    for d in (ROOT, USERS_DIR, CA_DIR, ARCHIVE_DIR):
         if not d.exists():
             d.mkdir(parents=True)
 
 def _safe_filename(name: str) -> str:
     return "".join(c for c in name if c.isalnum() or c in (' ', '.', '_', '-')).rstrip()
+
+def _get_license_id() -> str:
+    """Retorna un identificador único (hash SHA256) de la licencia actual."""
+    key = get_license_key()
+    return hashlib.sha256(key).hexdigest()
+
+def _archive_ca(license_id: str):
+    """Guarda una copia de la CA actual en el archivo."""
+    import shutil
+    target_dir = ARCHIVE_DIR / license_id
+    if not target_dir.exists():
+        target_dir.mkdir(parents=True)
+    
+    # Copiar archivos
+    priv_path = CA_DIR / "ca_private.enc"
+    pub_path = CA_DIR / "ca_public.pem"
+    
+    if priv_path.exists(): shutil.copy2(priv_path, target_dir / "ca_private.enc")
+    if pub_path.exists(): shutil.copy2(pub_path, target_dir / "ca_public.pem")
+    print(f"INFO: CA archivada para ID {license_id[:8]}...")
+
+def _restore_ca(license_id: str) -> bool:
+    """
+    Intenta restaurar la CA desde el archivo para el ID dado.
+    Retorna True si tuvo éxito.
+    """
+    import shutil
+    target_dir = ARCHIVE_DIR / license_id
+    priv = target_dir / "ca_private.enc"
+    pub = target_dir / "ca_public.pem"
+    
+    if priv.exists() and pub.exists():
+        shutil.copy2(priv, CA_DIR / "ca_private.enc")
+        shutil.copy2(pub, CA_DIR / "ca_public.pem")
+        print(f"INFO: CA restaurada desde archivo para ID {license_id[:8]}...")
+        return True
+    return False
 
 def get_license_key() -> bytes:
     """
@@ -189,17 +227,91 @@ def create_ca(aes_key_hex: str = None, key_size: int = 2048, force: bool = False
             pass
 
 
-def _ensure_ca_exists():
+def _test_ca_integrity() -> bool:
     """
-    Verifica que exista la CA. Si no existe, la crea automáticamente.
+    Intenta descifrar la clave privada de la CA con la licencia actual.
+    Devuelve True si tiene éxito, False si falla (indicando que la licencia cambió).
     """
     if not has_ca():
-        print("⚠ No se encontró la CA. Creando una nueva automáticamente...")
+        return False
+    
+    priv_path = CA_DIR / "ca_private.enc"     
+    data = priv_path.read_bytes()
+    iv = data[:16]
+    ciphertext = data[16:]
+    
+    tmp_enc = Path(tempfile.gettempdir()) / f"ca_test_{secrets.token_hex(8)}.enc"
+    tmp_out = Path(tempfile.gettempdir()) / f"ca_test_{secrets.token_hex(8)}.dec"
+    
+    try:
+        tmp_enc.write_bytes(ciphertext)
+        aes_key = get_license_key()
+        
+        # Intentar desencriptar
+        AES_MODULE.desencriptar_archivo_AES(
+            file_path=str(tmp_enc), 
+            modeAES="CBC", 
+            key=aes_key, 
+            iv=iv, 
+            key_length_bits=256, 
+            output_path=str(tmp_out)
+        )
+        # Si llegamos aquí sin error de padding del módulo AES (que suele lanzar ValueError o similar),
+        # intentamos cargar la key para estar seguros.
+        serialization.load_pem_private_key(tmp_out.read_bytes(), password=None, backend=default_backend())
+        return True
+    except Exception:
+        return False
+    finally:
+        # Cleanup
         try:
-            create_ca()
-            print("✓ CA creada automáticamente.")
-        except Exception as e:
-            raise RuntimeError(f"No se pudo crear la CA automáticamente: {e}")
+            if tmp_enc.exists(): tmp_enc.unlink()
+            if tmp_out.exists(): tmp_out.unlink()
+        except Exception:
+            pass
+
+
+def _ensure_ca_exists():
+    """
+    Verifica que exista la CA y que sea accesible con la licencia actual.
+    Gestiona el archivado y restauración de CAs según la licencia.
+    """
+    _ensure_dirs()
+    
+    # Obtener ID de licencia actual
+    try:
+        lic_id = _get_license_id()
+    except Exception:
+        # Si no hay licencia válida, no podemos hacer mucho
+        raise RuntimeError("No hay licencia válida para gestionar la CA.")
+
+    # 1. Intentar restaurar desde el archivo si existe
+    if _restore_ca(lic_id):
+        # Verificar integridad tras restaurar (paranoia check)
+        if _test_ca_integrity():
+            return
+        else:
+            print("⚠ ADVERTENCIA: La CA restaurada no es válida para esta licencia. Regenerando...")
+
+    # 2. Si no se restauró, verificar si la CA activa actual sirve
+    if has_ca():
+        if _test_ca_integrity():
+            # La CA actual es válida para esta licencia. La archivamos por seguridad.
+            _archive_ca(lic_id)
+            return
+        else:
+            # CA existe pero es de otra licencia (y no encontramos backup de la actual)
+            print("⚠ DETECTADO CAMBIO DE LICENCIA: La CA existente no es válida para esta licencia actual.")
+            print("↺ Generando nueva Autoridad de Certificación...")
+
+    # 3. No existe CA o inválida -> Crear nueva
+    try:
+        create_ca(force=True)
+        # 4. Archivar inmediatamente la nueva CA
+        _archive_ca(lic_id)
+        print("✓ Nueva CA generada y archivada.")
+    except Exception as e:
+        raise RuntimeError(f"Error fatal rotando la CA: {e}")
 
 
 def _load_ca_public() -> serialization.PublicFormat:
@@ -342,6 +454,13 @@ def create_user(identity: str, password: str, key_size: int = 2048) -> None:
 
 def list_certificates():
     _ensure_dirs()
+    # Ensure CA is in sync with license before validating
+    try:
+        _ensure_ca_exists()
+        ca_pub = _load_ca_public()
+    except Exception:
+        ca_pub = None
+
     certs = []
     for p in USERS_DIR.glob("*.cert"):
         try:
@@ -349,13 +468,13 @@ def list_certificates():
                 cert = json.load(f)
             # Try to verify; if invalid, mark as invalid
             valid = False
-            try:
-                ca_pub = _load_ca_public()
-                sig = base64.b64decode(cert.get("signature", ""))
-                ca_pub.verify(sig, cert.get("public_key_pem", "").encode("utf-8") + cert.get("identity", "").encode("utf-8"), padding.PKCS1v15(), hashes.SHA256())
-                valid = True
-            except Exception:
-                valid = False
+            if ca_pub:
+                try:
+                    sig = base64.b64decode(cert.get("signature", ""))
+                    ca_pub.verify(sig, cert.get("public_key_pem", "").encode("utf-8") + cert.get("identity", "").encode("utf-8"), padding.PKCS1v15(), hashes.SHA256())
+                    valid = True
+                except Exception:
+                    valid = False
             certs.append({"path": str(p), "identity": cert.get("identity"), "valid": valid})
         except Exception:
             continue
